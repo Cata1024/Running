@@ -1,11 +1,11 @@
 {
   "name": "Territory Run",
-  "short_name": "Territory",
-  "start_url": "./",
+  "short_name": "Territory Run",
+  "start_url": ".",
   "display": "standalone",
-  "background_color": "#0175C2",
+  "background_color": "#FFFFFF",
   "theme_color": "#2E7D32",
-  "description": "Convierte cada carrera en conquista territorial",
+  "description": "Conquista tu ciudad corriendo y marcando territorio",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [

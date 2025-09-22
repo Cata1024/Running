@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme.dart';
 import 'features/home.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const RunningApp());
+  runApp(
+    ProviderScope(
+      child: RunningApp(),
+    ),
+  );
 }
 
 class RunningApp extends StatelessWidget {
