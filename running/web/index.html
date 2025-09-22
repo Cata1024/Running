@@ -1,36 +1,41 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
-  <base href="$FLUTTER_BASE_HREF">
+  <!-- Base href DEBE ser / para Firebase Hosting -->
+  <base href="/">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+  <meta name="description" content="Territory Run - Conquista tu ciudad">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="running">
+  <meta name="apple-mobile-web-app-title" content="Territory Run">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>running</title>
+  <title>Territory Run</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Mejoras de fuentes para evitar fallback por red lenta -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Opcional: usa tu familia real si usas Google Fonts -->
+  <!-- <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet"> -->
+
+  <script>
+    // Forzar renderer HTML (mejor para google_maps_flutter_web)
+    window.flutterConfiguration = { renderer: "html" };
+    window.initGm = () => {};
+  </script>
+
+  <!-- Google Maps con async y loading=async para quitar el warning -->
+  <script async
+          src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD7p9SqQYqJ87vWdBXa_lJKUIxL91h79s4&v=weekly&libraries=geometry,places&loading=async&callback=initGm">
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

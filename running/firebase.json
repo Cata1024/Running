@@ -1,0 +1,50 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "running-app-uni",
+          "appId": "1:28475506464:android:42127b726cf1b06d2c6145",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "running-app-uni",
+          "configurations": {
+            "android": "1:28475506464:android:42127b726cf1b06d2c6145",
+            "ios": "1:28475506464:ios:5e701cdec12ee8302c6145",
+            "macos": "1:28475506464:ios:5e701cdec12ee8302c6145",
+            "web": "1:28475506464:web:782c4974a284d18f2c6145",
+            "windows": "1:28475506464:web:1beaf918fc2e62642c6145"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(eot|otf|ttf|ttc|woff|font.css)",
+        "headers": [
+          {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "28475506464",
+    "project_id": "running-app-uni",
+    "storage_bucket": "running-app-uni.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:28475506464:android:42127b726cf1b06d2c6145",
+        "android_client_info": {
+          "package_name": "com.example.running"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBqcd9IJcaH18idl5wfLHnkNSuEuPZA5ak"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

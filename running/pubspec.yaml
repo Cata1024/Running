@@ -29,14 +29,53 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   flutter:
-  sdk: flutter
-  geolocator: ^10.6.2   # GPS y permisos
-  flutter_map: ^4.2.0    # Mapa en tiempo real
-  latlong2: ^0.9.0       # Para coordenadas
+    sdk: flutter
+
+  # Dependencias principales
+  google_maps_flutter: ^2.9.0
+  google_maps_flutter_web: ^0.5.14+2
+  geolocator: ^11.1.0
+  geolocator_web: ^3.0.0
+  latlong2: ^0.8.2          # Para coordenadas (utilidades geográficas)
+  
+  # Gestión de estado
+  flutter_riverpod: ^2.6.1  # Estado reactivo (estable)
+  
+  # Almacenamiento local
+  isar: ^3.1.0+1          # Base de datos local high-performance
+  isar_flutter_libs: ^3.1.0+1  # Libs nativas para Isar
+  
+  # Geometría y mapas
+  turf: ^0.0.8            # Cálculos geométricos (polígonos, áreas)
+  
+  # UI y navegación
+  go_router: ^14.3.0      # Navegación declarativa (estable actualizada)
+  
+  # Utilidades
+  path_provider: ^2.1.0   # Rutas del dispositivo
+  permission_handler: ^11.4.0  # Gestión de permisos (estable)
+  
+  # Compartir
+  screenshot: ^2.5.0      # Captura de pantallas 
+  share_plus: ^7.2.2     # Compartir contenido (compatible)
+  
+  # Firebase para backend - VERSIONES COMPATIBLES PROBADAS
+  firebase_core: ^2.32.0      # Core Firebase (versión base estable)
+  firebase_auth: ^4.17.8      # Autenticación (compatible con core 2.32)
+  cloud_firestore: ^4.17.3    # Base de datos Firestore (compatible)
+  firebase_storage: ^11.7.6   # Almacenamiento de archivos (compatible)
+  firebase_analytics: ^10.10.6 # Analytics (compatible)
+  firebase_crashlytics: ^3.5.7 # Crash reporting (compatible)
+  
+  # Internacionalización
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2           # Versión requerida por Flutter SDK
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -47,7 +86,14 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^4.0.0    # Versión estable de lints
+  
+  # Generación de código
+  isar_generator: ^3.1.0+1  # Generador para Isar
+  build_runner: ^2.4.13      # Herramienta compatible con isar_generator
+  
+  # Otros
+  json_annotation: ^4.8.0   # Anotaciones JSON (versión estable)
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -59,6 +105,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  
+  # Para generar los componentes web (PWA)
+  generate: true
 
   # To add assets to your application, add an assets section, like this:
   # assets:
