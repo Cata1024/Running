@@ -28,3 +28,14 @@ plugins {
 }
 
 include(":app")
+
+// Patch to add namespace to isar_flutter_libs
+gradle.beforeProject {
+    if (name == "isar_flutter_libs") {
+        afterEvaluate {
+            extensions.findByName("android")?.apply {
+                this::class.java.getMethod("setNamespace", String::class.java).invoke(this, "io.isar.flutter.libs")
+            }
+        }
+    }
+}
