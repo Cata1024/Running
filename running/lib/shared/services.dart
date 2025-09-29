@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 
 /// Servicio de Autenticación de Firebase
@@ -22,7 +23,7 @@ class AuthService {
       );
       return credential;
     } on FirebaseAuthException catch (e) {
-      print('Error en registro: ${e.message}');
+  debugPrint('Error en registro: ${e.message}');
       rethrow;
     }
   }
@@ -36,7 +37,7 @@ class AuthService {
       );
       return credential;
     } on FirebaseAuthException catch (e) {
-      print('Error en login: ${e.message}');
+  debugPrint('Error en login: ${e.message}');
       rethrow;
     }
   }
@@ -51,7 +52,7 @@ class AuthService {
     try {
       await _auth.sendPasswordResetEmail(email: email);
     } on FirebaseAuthException catch (e) {
-      print('Error al restablecer contraseña: ${e.message}');
+  debugPrint('Error al restablecer contraseña: ${e.message}');
       rethrow;
     }
   }
@@ -69,7 +70,7 @@ class FirestoreService {
           .doc(user.id)
           .set(user.toMap(), SetOptions(merge: true));
     } catch (e) {
-      print('Error guardando perfil de usuario: $e');
+  debugPrint('Error guardando perfil de usuario: $e');
       rethrow;
     }
   }
@@ -83,7 +84,7 @@ class FirestoreService {
       }
       return null;
     } catch (e) {
-      print('Error obteniendo perfil de usuario: $e');
+  debugPrint('Error obteniendo perfil de usuario: $e');
       rethrow;
     }
   }
@@ -130,7 +131,7 @@ class FirestoreService {
         return run.id;
       }
     } catch (e) {
-      print('Error guardando carrera: $e');
+  debugPrint('Error guardando carrera: $e');
       rethrow;
     }
   }
@@ -150,7 +151,7 @@ class FirestoreService {
           .map((doc) => RunModel.fromMap(doc.data(), doc.id))
           .toList();
     } catch (e) {
-      print('Error obteniendo carreras: $e');
+  debugPrint('Error obteniendo carreras: $e');
       rethrow;
     }
   }
@@ -184,7 +185,7 @@ class FirestoreService {
       }
       return null;
     } catch (e) {
-      print('Error obteniendo carrera: $e');
+  debugPrint('Error obteniendo carrera: $e');
       rethrow;
     }
   }
@@ -199,7 +200,7 @@ class FirestoreService {
           .doc(runId)
           .delete();
     } catch (e) {
-      print('Error eliminando carrera: $e');
+  debugPrint('Error eliminando carrera: $e');
       rethrow;
     }
   }
@@ -239,7 +240,7 @@ class FirestoreService {
         }
       });
     } catch (e) {
-      print('Error actualizando estadísticas del usuario: $e');
+  debugPrint('Error actualizando estadísticas del usuario: $e');
       rethrow;
     }
   }
@@ -253,11 +254,9 @@ class FirestoreService {
           .limit(limit)
           .get();
       
-      return query.docs
-          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
-          .toList();
+    return query.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList();
     } catch (e) {
-      print('Error obteniendo ranking: $e');
+  debugPrint('Error obteniendo ranking: $e');
       rethrow;
     }
   }
@@ -267,18 +266,16 @@ class FirestoreService {
     try {
       // Nota: Firestore no soporta búsqueda de texto completo nativamente
       // Esta es una implementación básica que busca por el inicio del displayName
-      final snapshot = await _firestore
-          .collection('users')
-          .where('displayName', isGreaterThanOrEqualTo: query)
-          .where('displayName', isLessThan: query + '\uf8ff')
-          .limit(limit)
-          .get();
+    final snapshot = await _firestore
+      .collection('users')
+      .where('displayName', isGreaterThanOrEqualTo: query)
+      .where('displayName', isLessThan: '$query\uf8ff')
+      .limit(limit)
+      .get();
       
-      return snapshot.docs
-          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
-          .toList();
+      return snapshot.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList();
     } catch (e) {
-      print('Error buscando usuarios: $e');
+  debugPrint('Error buscando usuarios: $e');
       rethrow;
     }
   }

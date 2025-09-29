@@ -26,22 +26,22 @@
   <!-- Opcional: usa tu familia real si usas Google Fonts -->
   <!-- <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet"> -->
 
+  <!-- Meta viewport para mejor layout responsive -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <!-- Callback opcional para saber cuándo está lista la API de Maps -->
   <script>
-    // Forzar renderer HTML (mejor para google_maps_flutter_web)
-    window.flutterConfiguration = { renderer: "html" };
-    
-    // Callback para saber cuándo está lista la API de Maps
-    function initGm() {
-      window.mapsApiLoaded = true;
-    }
+    function initGm() { window.mapsApiLoaded = true; }
   </script>
 
-  <!-- Google Maps con async y defer para no bloquear el renderizado -->
-  <script async defer
-          src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD7p9SqQYqJ87vWdBXa_lJKUIxL91h79s4&v=weekly&libraries=geometry,places&callback=initGm">
+  <!-- Google Maps con loading=async (patrón recomendado) -->
+  <script async
+          src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD7p9SqQYqJ87vWdBXa_lJKUIxL91h79s4&v=weekly&libraries=geometry,places&loading=async&callback=initGm">
   </script>
 </head>
 <body>
+  <!-- Arranque Flutter Web recomendado: solo incluye estos scripts -->
+  <script src="flutter.js" defer></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

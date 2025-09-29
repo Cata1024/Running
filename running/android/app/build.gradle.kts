@@ -31,7 +31,8 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.cata1024.running"
-    compileSdk = flutter.compileSdkVersion
+    // Plugins (geolocator, maps, etc.) requieren compilar con SDK 36
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     signingConfigs {
@@ -44,12 +45,14 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        // Actualiza a Java 21
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        // Genera bytecode para JVM 21
+        jvmTarget = JavaVersion.VERSION_21.toString()
     }
 
     defaultConfig {
@@ -58,7 +61,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         
@@ -76,4 +79,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+// Forzar toolchain de Kotlin/Java a JDK 21
+kotlin {
+    jvmToolchain(21)
 }

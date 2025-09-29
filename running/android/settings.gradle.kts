@@ -19,6 +19,8 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    // Habilita descarga automática de JDKs (toolchains) vía Foojay
+    id("org.gradle.toolchains.foojay-resolver-convention") version "0.9.0"
     id("com.android.application") version "8.9.1" apply false
     // START: FlutterFire Configuration
     id("com.google.gms.google-services") version("4.3.15") apply false

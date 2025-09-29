@@ -4,8 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTheme {
   static const seed = Color(0xFF2E7D32);
 
-  static ThemeData light() {
-    final cs = ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.light);
+  // Permite pasar un ColorScheme (por Color Dinámico). Si es null, usa seed fallback.
+  static ThemeData light([ColorScheme? colorScheme]) {
+    final cs = colorScheme ?? ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.light);
     final text = GoogleFonts.interTextTheme();
 
     return ThemeData(
@@ -67,7 +68,7 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: cs.surfaceContainerHighest,
         selectedColor: cs.primaryContainer,
-        disabledColor: cs.surfaceVariant,
+        disabledColor: cs.surfaceContainerHighest,
         labelStyle: text.bodyMedium!,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         side: BorderSide(color: cs.outlineVariant),
@@ -76,10 +77,10 @@ class AppTheme {
     );
   }
 
-  static ThemeData dark() {
-    final cs = ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark);
+  static ThemeData dark([ColorScheme? colorScheme]) {
+    final cs = colorScheme ?? ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark);
     final text = GoogleFonts.interTextTheme(ThemeData.dark().textTheme);
-    final base = light();
+    final base = light(cs);
     return base.copyWith(
       colorScheme: cs,
       textTheme: text,

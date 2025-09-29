@@ -32,6 +32,8 @@ subprojects {
         plugins.withId("com.android.library") {
             // Configure Android library extension
             val androidExt = extensions.getByType(LibraryExtension::class.java)
+            // Asegura compileSdk alto para evitar errores como android:attr/lStar
+            androidExt.compileSdk = 35
             // Use the original package name as namespace
             androidExt.namespace = "dev.isar.isar_flutter_libs"
 
@@ -65,6 +67,16 @@ subprojects {
                     dependsOn(patchIsarManifest)
                 }
             }
+        }
+    }
+}
+
+// Asegura compileSdk=35 en TODAS las librerías Android del árbol (defensa adicional)
+subprojects {
+    plugins.withId("com.android.library") {
+        val androidExt = extensions.getByType(LibraryExtension::class.java)
+        if (androidExt.compileSdk == null || androidExt.compileSdk!! < 33) {
+            androidExt.compileSdk = 35
         }
     }
 }

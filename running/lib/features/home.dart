@@ -6,8 +6,12 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/auth_service.dart';
+import '../shared/services.dart' as shared_services;
+import '../services/territory_service.dart';
 import '../core/constants.dart';
 import 'map_widget.dart'; // Importa el nuevo widget de mapa
+import '../core/marker_utils.dart';
+import '../core/map_styles.dart';
 
 // Provider para el estado de la carrera (sin cambios)
 final runStateProvider = StateNotifierProvider<RunStateNotifier, RunState>((ref) {
@@ -71,6 +75,7 @@ class RunState {
 class RunStateNotifier extends StateNotifier<RunState> {
   Timer? _timer;
   StreamSubscription<Position>? _positionStream;
+  final _auth = AuthService();
 
   RunStateNotifier() : super(const RunState()) {
     _initializeLocation();
@@ -90,7 +95,7 @@ class RunStateNotifier extends StateNotifier<RunState> {
         }
       }
     } catch (e) {
-      print('Error inicializando ubicación: $e');
+      debugPrint('Error inicializando ubicación: $e');
     }
   }
 
@@ -111,7 +116,7 @@ class RunStateNotifier extends StateNotifier<RunState> {
         return permission.isGranted;
       }
     } catch (e) {
-      print('Error solicitando permisos: $e');
+      debugPrint('Error solicitando permisos: $e');
       return false;
     }
   }
@@ -121,7 +126,7 @@ class RunStateNotifier extends StateNotifier<RunState> {
     if (!state.locationPermissionGranted) {
       final permission = await _requestLocationPermission();
       if (!permission) {
-        print('Permisos de ubicación denegados');
+        debugPrint('Permisos de ubicación denegados');
         return;
       }
       state = state.copyWith(locationPermissionGranted: true);
@@ -162,7 +167,7 @@ class RunStateNotifier extends StateNotifier<RunState> {
   }
 
   // Finalizar carrera
-  void stopRun() {
+  Future<void> stopRun() async {
     state = state.copyWith(
       isRunning: false,
       isPaused: false,
@@ -170,6 +175,18 @@ class RunStateNotifier extends StateNotifier<RunState> {
     _stopTimer();
     _stopLocationTracking();
     _checkCircuitClosed();
+
+    // Si se cerró circuito y se cumplieron mínimos, calcular y aplicar tiles
+    final meetsTime = state.elapsed.inSeconds >= AppConstants.minRunDuration;
+    final meetsDistance = state.distance >= AppConstants.minRunDistance;
+    if (state.isCircuitClosed && meetsTime && meetsDistance) {
+      final user = _auth.currentUser;
+      if (user != null) {
+        final territoryService = TerritoryService();
+        final tiles = await territoryService.computeTilesFromTrack(track: state.routePoints);
+        await territoryService.applyTiles(userId: user.uid, tiles: tiles, capture: true);
+      }
+    }
   }
 
   // Resetear carrera
@@ -237,6 +254,9 @@ class RunStateNotifier extends StateNotifier<RunState> {
       distance: newDistance,
       averagePace: newPace,
     );
+
+    // Revisa en vivo si ya se cerró el circuito
+    _checkCircuitClosed();
   }
 
   // Verificar si el circuito está cerrado
@@ -280,11 +300,13 @@ class RunStateNotifier extends StateNotifier<RunState> {
   Future<Position?> _getCurrentPosition() async {
     try {
       return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
       );
     } catch (e) {
-      print('Error obteniendo ubicación: $e');
+      debugPrint('Error obteniendo ubicación: $e');
       // Ubicación por defecto (Bogotá) si falla
       return null;
     }
@@ -310,14 +332,31 @@ class _HomePageState extends ConsumerState<HomePage> {
   final GlobalKey<MapContainerState> _mapContainerKey = GlobalKey<MapContainerState>();
   GoogleMapController? _mapController;
   StreamSubscription<Position>? _positionStream;
+  bool _showOnlyMine = true; // toggle de visualización de territorio
   
   // Ubicación del usuario (punto azul), separada del estado de la carrera.
   LatLng? _currentUserLocation;
+  // Preferencias y control de cámara
+  bool _followUser = true;
+  MapType _mapType = MapType.normal;
+  DateTime? _lastCameraUpdate;
+  // Íconos personalizados
+  BitmapDescriptor? _runnerIconBlue;
+  BitmapDescriptor? _runnerIconOrange;
+  double _heading = 0;
 
   @override
   void initState() {
     super.initState();
+    _loadMarkerIcons();
     _initializeUserLocationStream();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reaplica el estilo si cambia el tema (oscuro/claro)
+    _applyMapStyleByTheme(context);
   }
 
   @override
@@ -336,7 +375,9 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     // Obtiene la primera ubicación para centrar el mapa
     try {
-      final position = await Geolocator.getCurrentPosition(timeLimit: const Duration(seconds: 5));
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(timeLimit: Duration(seconds: 5)),
+      );
       if (mounted) {
         setState(() {
           _currentUserLocation = LatLng(position.latitude, position.longitude);
@@ -354,39 +395,90 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (mounted) {
         setState(() {
           _currentUserLocation = LatLng(position.latitude, position.longitude);
+          if (position.heading.isFinite) {
+            _heading = position.heading;
+          }
         });
-        // Si no hay una carrera activa, sigue al usuario
-        if (!ref.read(runStateProvider).isRunning) {
-           _mapContainerKey.currentState?.moveCamera(_currentUserLocation!);
+        // Seguir al usuario con animación y throttle si está habilitado
+        if (_followUser) {
+          final now = DateTime.now();
+          if (_lastCameraUpdate == null || now.difference(_lastCameraUpdate!) > const Duration(milliseconds: 500)) {
+            _lastCameraUpdate = now;
+            final camPos = CameraPosition(
+              target: _currentUserLocation!,
+              zoom: 17,
+              bearing: position.heading.isFinite ? position.heading : 0,
+            );
+            _mapContainerKey.currentState?.moveCamera(CameraUpdate.newCameraPosition(camPos));
+          }
         }
       }
     });
   }
 
+  Future<void> _loadMarkerIcons() async {
+    try {
+      final blue = await MarkerUtils.runnerMarker(size: 72, bg: const Color(0xFF1E88E5));
+      final orange = await MarkerUtils.runnerMarker(size: 72, bg: const Color(0xFFFF8F00));
+      if (mounted) {
+        setState(() {
+          _runnerIconBlue = blue;
+          _runnerIconOrange = orange;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error creando íconos de marcador: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // `ref.watch` reconstruye este widget cuando cambia el estado de la carrera
-    final runState = ref.watch(runStateProvider);
+  final runState = ref.watch(runStateProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Territory Run'),
+        // Sin título: solo íconos
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_suggest_outlined),
+            tooltip: 'Personalización',
+            onPressed: _openPreferencesSheet,
+          ),
+          IconButton(
+            tooltip: _showOnlyMine ? 'Ver territorio de todos' : 'Ver solo mi territorio',
+            icon: Icon(_showOnlyMine ? Icons.public : Icons.person_pin_circle),
+            onPressed: () => setState(() { _showOnlyMine = !_showOnlyMine; }),
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => _showLogoutDialog(context),
           )
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          _buildMetricsPanel(runState),
-          Expanded(
-            child: _buildMap(runState),
+          // Mapa como fondo
+          Positioned.fill(child: _buildMap(runState)),
+
+          // Panel de métricas flotante (M3)
+          Positioned(
+            left: 16,
+            right: 16,
+            top: 12,
+            child: Card(
+              elevation: 0,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.92),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: _buildMetricsRow(runState),
+              ),
+            ),
           ),
-          _buildControlPanel(runState),
         ],
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: _buildFab(context, runState),
     );
   }
 
@@ -394,14 +486,21 @@ class _HomePageState extends ConsumerState<HomePage> {
     // Los markers y polylines se calculan aquí, pero el mapa NO se reconstruye.
     final markers = _buildMarkers(runState);
     final polylines = _buildPolylines(runState);
+    final polygons = _buildPolygons(runState)..addAll(_buildTerritoryPolygons());
 
     return MapContainer(
       key: _mapContainerKey,
-      initialPosition: _currentUserLocation ?? const LatLng(4.7110, -74.0721), // Posición inicial o de fallback
+      initialPosition: CameraPosition(
+        target: _currentUserLocation ?? const LatLng(4.7110, -74.0721),
+        zoom: 14,
+      ), // Posición inicial o de fallback
       markers: markers,
       polylines: polylines,
+      polygons: polygons,
+      mapType: _mapType,
       onMapCreated: (controller) {
         _mapController = controller;
+        _applyMapStyleByTheme(context);
         // Si ya tenemos la ubicación del usuario cuando el mapa se crea,
         // movemos la cámara a esa posición.
         if (_currentUserLocation != null) {
@@ -409,6 +508,14 @@ class _HomePageState extends ConsumerState<HomePage> {
         }
       },
     );
+  }
+
+  void _applyMapStyleByTheme(BuildContext context) {
+    if (_mapController == null) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final style = isDark ? MapStyles.dark : MapStyles.light;
+    // Ignorar errores silenciosamente si la plataforma no soporta estilos en web
+    _mapController!.setMapStyle(style).catchError((_) {});
   }
 
   Set<Marker> _buildMarkers(RunState runState) {
@@ -419,9 +526,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       markers.add(Marker(
         markerId: const MarkerId('userLocation'),
         position: _currentUserLocation!,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        icon: _runnerIconBlue ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
         anchor: const Offset(0.5, 0.5), // Centrado
-        zIndex: 1,
+        rotation: _heading,
+        flat: true,
+        zIndexInt: 1,
       ));
     }
 
@@ -439,7 +548,9 @@ class _HomePageState extends ConsumerState<HomePage> {
        markers.add(Marker(
         markerId: const MarkerId('runCurrent'),
         position: runState.currentLocation!,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+        icon: _runnerIconOrange ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+        rotation: _heading,
+        flat: true,
       ));
     }
 
@@ -461,159 +572,156 @@ class _HomePageState extends ConsumerState<HomePage> {
     };
   }
 
-  Widget _buildMetricsPanel(RunState runState) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildMetricCard(
-            'Tiempo',
-            _formatDuration(runState.elapsed),
-            Icons.timer,
-          ),
-          _buildMetricCard(
-            'Distancia',
-            '${runState.distance.toStringAsFixed(2)} km',
-            Icons.straighten,
-          ),
-          _buildMetricCard(
-            'Ritmo',
-            runState.averagePace > 0 
-                ? '${runState.averagePace.toStringAsFixed(1)} min/km'
-                : '--:--',
-            Icons.speed,
-          ),
-        ],
-      ),
-    );
+  // Construye el polígono de circuito cuando se cumplan las condiciones mínimas
+  Set<Polygon> _buildPolygons(RunState runState) {
+    // Reglas para considerar circuito válido
+    final meetsTime = runState.elapsed.inSeconds >= AppConstants.minRunDuration;
+    final meetsDistance = runState.distance >= AppConstants.minRunDistance;
+    final isClosed = runState.isCircuitClosed;
+
+    if (!isClosed || !meetsTime || !meetsDistance) return {};
+    if (runState.routePoints.length < 3) return {};
+
+    // Polígono simple usando la ruta tal cual; en el futuro podemos simplificarla
+    return {
+      Polygon(
+        polygonId: const PolygonId('circuit'),
+        points: runState.routePoints,
+        strokeWidth: 3,
+        strokeColor: Colors.green,
+        fillColor: Colors.green.withValues(alpha: 0.2),
+      )
+    };
   }
 
-  Widget _buildMetricCard(String label, String value, IconData icon) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
+  // Construye polígonos para los tiles de territorio (míos o de todos)
+  Set<Polygon> _buildTerritoryPolygons() {
+    final currentUser = ref.read(shared_services.currentUserProvider);
+    final myTiles = currentUser != null
+        ? ref.read(myTerritoryTilesProvider(currentUser.uid)).maybeWhen(data: (d) => d, orElse: () => const [])
+        : const [];
+    final allTiles = ref.read(allTerritoryTilesProvider).maybeWhen(data: (d) => d, orElse: () => const []);
+
+    final tiles = _showOnlyMine ? myTiles : allTiles;
+    final color = _showOnlyMine ? Colors.blue : Colors.purple;
+
+    final polygons = <Polygon>{};
+    for (final t in tiles) {
+      final corners = t.toPolygonCorners();
+      polygons.add(Polygon(
+        polygonId: PolygonId('tile_${t.key}'),
+        points: corners,
+        strokeWidth: 1,
+        strokeColor: color.withValues(alpha: 0.7),
+        fillColor: color.withValues(alpha: 0.15),
+        consumeTapEvents: false,
+      ));
+    }
+    return polygons;
+  }
+
+  // Eliminado panel de métricas antiguo; ahora se usa el panel flotante M3
+
+  // (eliminado) _buildMetricCard ya no se utiliza en el nuevo diseño M3
+
+  // Nueva fila compacta de métricas para el panel flotante (Material 3)
+  Widget _buildMetricsRow(RunState runState) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Icon(
-          icon,
-          color: Theme.of(context).colorScheme.primary,
-          size: 24,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        _buildMetricChip(Icons.timer, _formatDuration(runState.elapsed), 'Tiempo'),
+        _buildMetricChip(Icons.straighten, '${runState.distance.toStringAsFixed(2)} km', 'Distancia'),
+        _buildMetricChip(Icons.speed, runState.averagePace > 0 ? '${runState.averagePace.toStringAsFixed(1)} min/km' : '--:--', 'Ritmo'),
       ],
     );
   }
 
-  Widget _buildControlPanel(RunState runState) {
+  // Chip compacto de métrica (Material 3) sin texto de etiqueta visible para evitar overflow
+  Widget _buildMetricChip(IconData icon, String value, String label) {
+    final cs = Theme.of(context).colorScheme;
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: cs.primary, size: 18),
+        const SizedBox(width: 6),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+    // Usa el label como tooltip para accesibilidad
+    return Tooltip(message: label, child: content);
+  }
+
+  // (eliminado) _buildControlPanel ya no se utiliza; los controles están en el FAB
+
+  // FAB contextual según estado de la carrera (Material 3)
+  Widget _buildFab(BuildContext context, RunState runState) {
     final runNotifier = ref.read(runStateProvider.notifier);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Column(
+
+    if (!runState.locationPermissionGranted) {
+      return Tooltip(
+        message: 'Permisos de ubicación requeridos',
+        child: FloatingActionButton(
+          onPressed: () => runNotifier.startRun(),
+          child: const Icon(Icons.location_searching),
+        ),
+      );
+    }
+
+    if (!runState.isRunning) {
+      return FloatingActionButton.extended(
+        onPressed: () => runNotifier.startRun(),
+        icon: const Icon(Icons.play_arrow),
+        label: const Text('Iniciar'),
+      );
+    }
+
+    if (runState.isPaused) {
+      return Wrap(
+        spacing: 12,
         children: [
-          // Estado de permisos
-          if (!runState.locationPermissionGranted)
-            Container(
-              padding: const EdgeInsets.all(8),
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade100,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.location_off, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Permisos de ubicación necesarios para el tracking',
-                      style: TextStyle(color: Colors.orange),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          
-          // Botones de control
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              if (!runState.isRunning) ...[
-                ElevatedButton.icon(
-                  onPressed: () => runNotifier.startRun(),
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Iniciar'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                ),
-              ] else ...[
-                if (!runState.isPaused) ...[
-                  ElevatedButton.icon(
-                    onPressed: () => runNotifier.pauseRun(),
-                    icon: const Icon(Icons.pause),
-                    label: const Text('Pausar'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ] else ...[
-                  ElevatedButton.icon(
-                    onPressed: () => runNotifier.resumeRun(),
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Reanudar'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-                ElevatedButton.icon(
-                  onPressed: () => runNotifier.stopRun(),
-                  icon: const Icon(Icons.stop),
-                  label: const Text('Finalizar'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-              if (runState.isRunning || runState.elapsed.inSeconds > 0) ...[
-                ElevatedButton.icon(
-                  onPressed: () => runNotifier.resetRun(),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Reset'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-            ],
+          FloatingActionButton.extended(
+            onPressed: () => runNotifier.resumeRun(),
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Reanudar'),
+          ),
+          FloatingActionButton(
+            heroTag: 'fab-stop',
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+            onPressed: () => runNotifier.stopRun(),
+            child: const Icon(Icons.stop),
+          ),
+          FloatingActionButton(
+            heroTag: 'fab-reset',
+            onPressed: () => runNotifier.resetRun(),
+            child: const Icon(Icons.refresh),
           ),
         ],
-      ),
+      );
+    }
+
+    // isRunning && !isPaused
+    return Wrap(
+      spacing: 12,
+      children: [
+        FloatingActionButton.extended(
+          onPressed: () => runNotifier.pauseRun(),
+          icon: const Icon(Icons.pause),
+          label: const Text('Pausar'),
+        ),
+        FloatingActionButton(
+          heroTag: 'fab-stop',
+          backgroundColor: Theme.of(context).colorScheme.error,
+          foregroundColor: Theme.of(context).colorScheme.onError,
+          onPressed: () => runNotifier.stopRun(),
+          child: const Icon(Icons.stop),
+        ),
+      ],
     );
   }
 
@@ -653,4 +761,80 @@ class _HomePageState extends ConsumerState<HomePage> {
       },
     );
   }
+
+  void _openPreferencesSheet() async {
+    final result = await showModalBottomSheet<_PrefsResult>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        bool follow = _followUser;
+        MapType mapType = _mapType;
+        return StatefulBuilder(builder: (ctx, setModalState) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.tune),
+                    const SizedBox(width: 8),
+                    Text('Personalización', style: Theme.of(context).textTheme.titleMedium),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  value: follow,
+                  onChanged: (v) => setModalState(() => follow = v),
+                  title: const Text('Seguir usuario'),
+                  secondary: const Icon(Icons.my_location),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.map_outlined),
+                    const SizedBox(width: 8),
+                    const Text('Tipo de mapa'),
+                    const Spacer(),
+                    DropdownButton<MapType>(
+                      value: mapType,
+                      onChanged: (v) => setModalState(() => mapType = v ?? MapType.normal),
+                      items: const [
+                        DropdownMenuItem(value: MapType.normal, child: Text('Normal')),
+                        DropdownMenuItem(value: MapType.terrain, child: Text('Terreno')),
+                        DropdownMenuItem(value: MapType.satellite, child: Text('Satélite')),
+                        DropdownMenuItem(value: MapType.hybrid, child: Text('Híbrido')),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(ctx, _PrefsResult(follow: follow, mapType: mapType)),
+                    icon: const Icon(Icons.check),
+                    label: const Text('Aplicar'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        });
+      },
+    );
+    if (result != null) {
+      setState(() {
+        _followUser = result.follow;
+        _mapType = result.mapType;
+      });
+    }
+  }
+}
+
+class _PrefsResult {
+  final bool follow;
+  final MapType mapType;
+  _PrefsResult({required this.follow, required this.mapType});
 }

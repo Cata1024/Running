@@ -6,13 +6,14 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:running/main.dart';
 
 void main() {
   testWidgets('Territory Run app smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const TerritoryRunApp());
+  await tester.pumpWidget(const ProviderScope(child: RunningApp()));
 
     // Verify that our app loads correctly
     expect(find.text('Territory Run'), findsOneWidget);
