@@ -13,11 +13,16 @@ class MarkerUtils {
     // En Web con renderer HTML, toImage no está soportado; usar fallback
     if (kIsWeb) {
       // Heurística simple para elegir un hue similar al color de fondo
-      final v = bg.value & 0xFFFFFF;
-      if (v == 0x1E88E5) {
+      final r = (bg.r * 255.0).round() & 0xff;
+      final g = (bg.g * 255.0).round() & 0xff;
+      final b = (bg.b * 255.0).round() & 0xff;
+      final hex = '${r.toRadixString(16).padLeft(2, '0')}'
+                 '${g.toRadixString(16).padLeft(2, '0')}'
+                 '${b.toRadixString(16).padLeft(2, '0')}';
+      if (hex == '1e88e5') {
         return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure);
       }
-      if (v == 0xFF8F00 || v == 0xFFA000 || v == 0xFF6D00) {
+      if (hex == 'ff8f00' || hex == 'ffa000' || hex == 'ff6d00') {
         return BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange);
       }
       return BitmapDescriptor.defaultMarker;
@@ -46,7 +51,9 @@ class MarkerUtils {
 
     final picture = recorder.endRecording();
     final img = await picture.toImage(size.toInt(), size.toInt());
-    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(
+      byteData!.buffer.asUint8List(),
+    );
   }
 }

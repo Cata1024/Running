@@ -129,7 +129,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Logo/Título
-                Icon(
+                const Icon(
                   Icons.running_with_errors,
                   size: 80,
                   color: Colors.white,

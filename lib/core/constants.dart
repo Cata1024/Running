@@ -1,22 +1,23 @@
+import 'env_config.dart';
+
 /// Constantes de la aplicación Territory Run
 class AppConstants {
   // Configuración de la aplicación
   static const String appName = 'Territory Run';
   static const String appVersion = '1.0.0';
   
-  // Google Maps API Keys por plataforma
-  static const String googleMapsApiKeyWeb = 'AIzaSyD7p9SqQYqJ87vWdBXa_lJKUIxL91h79s4';
-  static const String googleMapsApiKeyAndroid = 'AIzaSyBQEbVWObXD0xD5W-qRwQoG2bAGelIjl7M';
-  static const String googleMapsApiKeyIOS = 'AIzaSyBWPwVrCaxrIwm8rAYTqtVqKWUe5x18h4A';
+  // Google Maps API Keys delegadas a EnvConfig
+  static String get googleMapsApiKeyWeb => EnvConfig.instance.googleMapsApiKey;
+  static String get googleMapsApiKeyAndroid => EnvConfig.instance.googleMapsApiKey;
+  static String get googleMapsApiKeyIOS => EnvConfig.instance.googleMapsApiKey;
   
-  // API Key genérica (usa la de web por defecto)
-  static const String googleMapsApiKey = googleMapsApiKeyWeb;
+  // API Key genérica (web por defecto)
+  static String get googleMapsApiKey => EnvConfig.instance.googleMapsApiKey;
   
-  // Configuración de territorio
+  // Configuración de territory
   static const double circuitCloseRadius = 50.0; // metros
   static const int minRunDuration = 300; // 5 minutos en segundos
   static const double minRunDistance = 0.5; // km mínimos
-  
   // Configuración GPS
   static const int gpsUpdateInterval = 1000; // milisegundos
   static const double gpsAccuracyThreshold = 20.0; // metros

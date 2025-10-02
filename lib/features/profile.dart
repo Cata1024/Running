@@ -66,7 +66,7 @@ class ProfilePage extends ConsumerWidget {
 					);
 				},
 				loading: () => const Center(child: CircularProgressIndicator()),
-				error: (e, st) => Center(child: Text('Error cargando perfil')),
+				error: (e, st) => const Center(child: Text('Error cargando perfil')),
 			),
 		);
 	}

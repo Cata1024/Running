@@ -13,9 +13,36 @@ import 'map_widget.dart'; // Importa el nuevo widget de mapa
 import '../core/marker_utils.dart';
 import '../core/map_styles.dart';
 
-// Provider para el estado de la carrera (sin cambios)
+// -----------------------------
+// Centralized Position Stream
+// -----------------------------
+final positionStreamProvider = StreamProvider<Position>((ref) async* {
+  // Solicita permisos antes de exponer el stream para evitar errores
+  try {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (!(permission == LocationPermission.always || permission == LocationPermission.whileInUse)) {
+      throw Exception('Location permission not granted');
+    }
+  } catch (e) {
+    // Re-lanzar para que el provider quede en error y los consumidores lo manejen
+    throw Exception('Error requesting location permission: $e');
+  }
+
+  const settings = LocationSettings(
+    accuracy: LocationAccuracy.high,
+    distanceFilter: 5,
+  );
+
+  // Simplemente devolvemos el stream del Geolocator
+  yield* Geolocator.getPositionStream(locationSettings: settings);
+});
+
+// Provider para el estado de la carrera refactorizado para recibir Ref
 final runStateProvider = StateNotifierProvider<RunStateNotifier, RunState>((ref) {
-  return RunStateNotifier();
+  return RunStateNotifier(ref);
 });
 
 // Modelo del estado (sin cambios)
@@ -71,22 +98,38 @@ class RunState {
   }
 }
 
-// StateNotifier para manejar el estado (sin cambios)
+// StateNotifier refactorizado: escucha el positionStreamProvider en lugar de crear su propio stream
 class RunStateNotifier extends StateNotifier<RunState> {
+  final Ref ref;
   Timer? _timer;
-  StreamSubscription<Position>? _positionStream;
   final _auth = AuthService();
 
-  RunStateNotifier() : super(const RunState()) {
+  RunStateNotifier(this.ref) : super(const RunState()) {
     _initializeLocation();
+
+    // Escucha el stream centralizado de posición.
+    ref.listen<AsyncValue<Position>>(positionStreamProvider, (previous, next) {
+      next.when(
+        data: (pos) {
+          // Solo procesamos actualizaciones cuando la carrera está activa
+          if (state.isRunning && !state.isPaused) {
+            _updateLocationFromPosition(pos);
+          }
+        },
+        loading: () {},
+        error: (e, st) {
+          debugPrint('Position stream error in RunStateNotifier: $e');
+        },
+      );
+    });
   }
 
-  // Inicializar ubicación al cargar
+  // Inicializar ubicación al cargar (pide permisos y obtiene una posición inicial)
   Future<void> _initializeLocation() async {
     try {
       final permission = await _requestLocationPermission();
       state = state.copyWith(locationPermissionGranted: permission);
-      
+
       if (permission) {
         final position = await _getCurrentPosition();
         if (position != null) {
@@ -99,19 +142,17 @@ class RunStateNotifier extends StateNotifier<RunState> {
     }
   }
 
-  // Solicitar permisos de ubicación
+  // Solicitar permisos de ubicación. NOTA: el stream provider también los solicita, pero
+  // mantenemos esta función para flujos explícitos (ej. botón iniciar)
   Future<bool> _requestLocationPermission() async {
     try {
       if (kIsWeb) {
-        // En web, usar Geolocator directamente
         LocationPermission permission = await Geolocator.checkPermission();
         if (permission == LocationPermission.denied) {
           permission = await Geolocator.requestPermission();
         }
-        return permission == LocationPermission.whileInUse || 
-               permission == LocationPermission.always;
+        return permission == LocationPermission.whileInUse || permission == LocationPermission.always;
       } else {
-        // En móvil, usar permission_handler
         final permission = await Permission.location.request();
         return permission.isGranted;
       }
@@ -136,7 +177,7 @@ class RunStateNotifier extends StateNotifier<RunState> {
     if (position == null) return;
 
     final startLocation = LatLng(position.latitude, position.longitude);
-    
+
     state = state.copyWith(
       isRunning: true,
       isPaused: false,
@@ -149,21 +190,20 @@ class RunStateNotifier extends StateNotifier<RunState> {
     );
 
     _startTimer();
-    _startLocationTracking();
+    // Antes: start location tracking aquí; ahora el notifier confía en el positionStreamProvider
   }
 
   // Pausar carrera
   void pauseRun() {
     state = state.copyWith(isPaused: true);
     _stopTimer();
-    _stopLocationTracking();
+    // Notifier no cancela el stream—el listener ignora actualizaciones cuando isPaused == true
   }
 
   // Reanudar carrera
   void resumeRun() {
     state = state.copyWith(isPaused: false);
     _startTimer();
-    _startLocationTracking();
   }
 
   // Finalizar carrera
@@ -173,7 +213,6 @@ class RunStateNotifier extends StateNotifier<RunState> {
       isPaused: false,
     );
     _stopTimer();
-    _stopLocationTracking();
     _checkCircuitClosed();
 
     // Si se cerró circuito y se cumplieron mínimos, calcular y aplicar tiles
@@ -192,7 +231,6 @@ class RunStateNotifier extends StateNotifier<RunState> {
   // Resetear carrera
   void resetRun() {
     _stopTimer();
-    _stopLocationTracking();
     state = RunState(
       locationPermissionGranted: state.locationPermissionGranted,
       currentLocation: state.currentLocation,
@@ -206,7 +244,7 @@ class RunStateNotifier extends StateNotifier<RunState> {
       if (!state.isPaused && state.isRunning) {
         final newElapsed = Duration(seconds: state.elapsed.inSeconds + 1);
         final newPace = _calculateAveragePace(state.distance, newElapsed);
-        
+
         state = state.copyWith(
           elapsed: newElapsed,
           averagePace: newPace,
@@ -220,34 +258,14 @@ class RunStateNotifier extends StateNotifier<RunState> {
     _timer = null;
   }
 
-  // Tracking de ubicación
-  void _startLocationTracking() {
-    const locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 5,
-    );
-
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: locationSettings,
-    ).listen((Position position) {
-      if (!state.isPaused && state.isRunning) {
-        _updateLocation(position);
-      }
-    });
-  }
-
-  void _stopLocationTracking() {
-    _positionStream?.cancel();
-    _positionStream = null;
-  }
-
-  void _updateLocation(Position position) {
+  // Actualiza la ubicación basada en Position (llamado desde el listener del provider)
+  void _updateLocationFromPosition(Position position) {
     final newLocation = LatLng(position.latitude, position.longitude);
     final updatedRoute = [...state.routePoints, newLocation];
-    
+
     final newDistance = _calculateTotalDistance(updatedRoute);
     final newPace = _calculateAveragePace(newDistance, state.elapsed);
-    
+
     state = state.copyWith(
       currentLocation: newLocation,
       routePoints: updatedRoute,
@@ -268,7 +286,7 @@ class RunStateNotifier extends StateNotifier<RunState> {
         state.currentLocation!.latitude,
         state.currentLocation!.longitude,
       );
-      
+
       final isClosed = distance <= AppConstants.circuitCloseRadius;
       state = state.copyWith(isCircuitClosed: isClosed);
     }
@@ -277,7 +295,7 @@ class RunStateNotifier extends StateNotifier<RunState> {
   // Calcular distancia total
   double _calculateTotalDistance(List<LatLng> points) {
     if (points.length < 2) return 0.0;
-    
+
     double totalDistance = 0.0;
     for (int i = 1; i < points.length; i++) {
       totalDistance += Geolocator.distanceBetween(
@@ -300,14 +318,11 @@ class RunStateNotifier extends StateNotifier<RunState> {
   Future<Position?> _getCurrentPosition() async {
     try {
       return await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
-        ),
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 10),
       );
     } catch (e) {
       debugPrint('Error obteniendo ubicación: $e');
-      // Ubicación por defecto (Bogotá) si falla
       return null;
     }
   }
@@ -315,12 +330,13 @@ class RunStateNotifier extends StateNotifier<RunState> {
   @override
   void dispose() {
     _stopTimer();
-    _stopLocationTracking();
     super.dispose();
   }
 }
 
-// Página principal
+// -----------------------------
+// HomePage refactorizada para consumir positionStreamProvider
+// -----------------------------
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
@@ -331,9 +347,8 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   final GlobalKey<MapContainerState> _mapContainerKey = GlobalKey<MapContainerState>();
   GoogleMapController? _mapController;
-  StreamSubscription<Position>? _positionStream;
   bool _showOnlyMine = true; // toggle de visualización de territorio
-  
+
   // Ubicación del usuario (punto azul), separada del estado de la carrera.
   LatLng? _currentUserLocation;
   // Preferencias y control de cámara
@@ -342,88 +357,42 @@ class _HomePageState extends ConsumerState<HomePage> {
   DateTime? _lastCameraUpdate;
   // Íconos personalizados
   BitmapDescriptor? _runnerIconBlue;
-  BitmapDescriptor? _runnerIconOrange;
   double _heading = 0;
 
   @override
   void initState() {
     super.initState();
     _loadMarkerIcons();
-    _initializeUserLocationStream();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reaplica el estilo si cambia el tema (oscuro/claro)
-    _applyMapStyleByTheme(context);
+
+    if (_mapController != null && mounted) {
+      if (_mapStyle != null) {
+        _mapController!.setMapStyle(_mapStyle!);
+      }
+    }
   }
 
   @override
   void dispose() {
-    _positionStream?.cancel();
     super.dispose();
   }
 
-  // Configura un stream para la ubicación del usuario, independiente de la carrera.
-  void _initializeUserLocationStream() async {
-    // Espera a que los permisos estén listos
-    await ref.read(runStateProvider.notifier)._initializeLocation();
-    
-    final hasPermission = ref.read(runStateProvider).locationPermissionGranted;
-    if (!hasPermission || !mounted) return;
-
-    // Obtiene la primera ubicación para centrar el mapa
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(timeLimit: Duration(seconds: 5)),
-      );
-      if (mounted) {
-        setState(() {
-          _currentUserLocation = LatLng(position.latitude, position.longitude);
-        });
-        _mapController?.animateCamera(CameraUpdate.newLatLng(_currentUserLocation!));
-      }
-    } catch (e) {
-      debugPrint("Error obteniendo ubicación inicial: $e");
-    }
-
-    // Escucha cambios de posición para mover el punto azul
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
-    ).listen((position) {
-      if (mounted) {
-        setState(() {
-          _currentUserLocation = LatLng(position.latitude, position.longitude);
-          if (position.heading.isFinite) {
-            _heading = position.heading;
-          }
-        });
-        // Seguir al usuario con animación y throttle si está habilitado
-        if (_followUser) {
-          final now = DateTime.now();
-          if (_lastCameraUpdate == null || now.difference(_lastCameraUpdate!) > const Duration(milliseconds: 500)) {
-            _lastCameraUpdate = now;
-            final camPos = CameraPosition(
-              target: _currentUserLocation!,
-              zoom: 17,
-              bearing: position.heading.isFinite ? position.heading : 0,
-            );
-            _mapContainerKey.currentState?.moveCamera(CameraUpdate.newCameraPosition(camPos));
-          }
-        }
-      }
-    });
+  String? get _mapStyle {
+    if (!mounted) return null;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? MapStyles.dark : MapStyles.light;
   }
 
   Future<void> _loadMarkerIcons() async {
     try {
       final blue = await MarkerUtils.runnerMarker(size: 72, bg: const Color(0xFF1E88E5));
-      final orange = await MarkerUtils.runnerMarker(size: 72, bg: const Color(0xFFFF8F00));
       if (mounted) {
         setState(() {
           _runnerIconBlue = blue;
-          _runnerIconOrange = orange;
         });
       }
     } catch (e) {
@@ -431,14 +400,106 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
   }
 
+  Set<Marker> _buildMarkers(RunState runState) {
+    final markers = <Marker>{};
+
+    // Add user location marker
+    if (_currentUserLocation != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('userLocation'),
+        position: _currentUserLocation!,
+        icon: _runnerIconBlue ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        anchor: const Offset(0.5, 0.5),
+        rotation: _heading,
+        flat: true,
+        zIndexInt: 1,
+      ));
+    }
+
+    // Add start location marker if available
+    if (runState.startLocation != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('startLocation'),
+        position: runState.startLocation!,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      ));
+    }
+
+    return markers;
+  }
+
+  Set<Polyline> _buildPolylines(RunState runState) {
+    if (runState.routePoints.length < 2) return {};
+
+    return {
+      Polyline(
+        polylineId: const PolylineId('route'),
+        points: runState.routePoints,
+        color: runState.isCircuitClosed ? Colors.green : Colors.blue,
+        width: 5,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+        jointType: JointType.round,
+      ),
+    };
+  }
+
+  Set<Polygon> _buildPolygons(RunState runState) {
+    final meetsTime = runState.elapsed.inSeconds >= AppConstants.minRunDuration;
+    final meetsDistance = runState.distance >= AppConstants.minRunDistance;
+    final isClosed = runState.isCircuitClosed;
+
+    if (!isClosed || !meetsTime || !meetsDistance) return {};
+    if (runState.routePoints.length < 3) return {};
+
+    return {
+      Polygon(
+        polygonId: const PolygonId('circuit'),
+        points: runState.routePoints,
+        strokeWidth: 3,
+        strokeColor: Colors.green,
+        fillColor: Colors.green.withAlpha(51),
+      )
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    // `ref.watch` reconstruye este widget cuando cambia el estado de la carrera
-  final runState = ref.watch(runStateProvider);
+    ref.listen<AsyncValue<Position>>(positionStreamProvider, (previous, next) {
+      next.when(
+        data: (position) {
+          if (!mounted) return;
+          setState(() {
+            _currentUserLocation = LatLng(position.latitude, position.longitude);
+            if (position.heading.isFinite) {
+              _heading = position.heading;
+            }
+          });
+
+          if (_followUser) {
+            final now = DateTime.now();
+            if (_lastCameraUpdate == null || now.difference(_lastCameraUpdate!) > const Duration(milliseconds: 500)) {
+              _lastCameraUpdate = now;
+              final camPos = CameraPosition(
+                target: _currentUserLocation!,
+                zoom: 17,
+                bearing: position.heading.isFinite ? position.heading : 0,
+              );
+              _mapContainerKey.currentState?.moveCamera(CameraUpdate.newCameraPosition(camPos));
+            }
+          }
+        },
+        loading: () {},
+        error: (e, st) {
+          debugPrint('Position stream error in HomePage: $e');
+        },
+      );
+    });
+
+    final runState = ref.watch(runStateProvider);
 
     return Scaffold(
       appBar: AppBar(
-        // Sin título: solo íconos
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_suggest_outlined),
@@ -458,10 +519,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
       body: Stack(
         children: [
-          // Mapa como fondo
           Positioned.fill(child: _buildMap(runState)),
-
-          // Panel de métricas flotante (M3)
           Positioned(
             left: 16,
             right: 16,
@@ -483,26 +541,26 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildMap(RunState runState) {
-    // Los markers y polylines se calculan aquí, pero el mapa NO se reconstruye.
     final markers = _buildMarkers(runState);
     final polylines = _buildPolylines(runState);
     final polygons = _buildPolygons(runState)..addAll(_buildTerritoryPolygons());
 
     return MapContainer(
       key: _mapContainerKey,
+      mapStyle: _mapStyle,
       initialPosition: CameraPosition(
         target: _currentUserLocation ?? const LatLng(4.7110, -74.0721),
         zoom: 14,
-      ), // Posición inicial o de fallback
+      ),
       markers: markers,
       polylines: polylines,
       polygons: polygons,
       mapType: _mapType,
       onMapCreated: (controller) {
         _mapController = controller;
-        _applyMapStyleByTheme(context);
-        // Si ya tenemos la ubicación del usuario cuando el mapa se crea,
-        // movemos la cámara a esa posición.
+        if (mounted) {
+          controller.setMapStyle(_mapStyle);
+        }
         if (_currentUserLocation != null) {
           controller.animateCamera(CameraUpdate.newLatLng(_currentUserLocation!));
         }
@@ -510,121 +568,41 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  void _applyMapStyleByTheme(BuildContext context) {
-    if (_mapController == null) return;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final style = isDark ? MapStyles.dark : MapStyles.light;
-    // Ignorar errores silenciosamente si la plataforma no soporta estilos en web
-    _mapController!.setMapStyle(style).catchError((_) {});
-  }
-
-  Set<Marker> _buildMarkers(RunState runState) {
-    final markers = <Marker>{};
-
-    // Marker para la ubicación actual del usuario (punto azul)
-    if (_currentUserLocation != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('userLocation'),
-        position: _currentUserLocation!,
-        icon: _runnerIconBlue ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        anchor: const Offset(0.5, 0.5), // Centrado
-        rotation: _heading,
-        flat: true,
-        zIndexInt: 1,
-      ));
-    }
-
-    // Marker de inicio de carrera
-    if (runState.startLocation != null) {
-      markers.add(Marker(
-        markerId: const MarkerId('start'),
-        position: runState.startLocation!,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-      ));
-    }
-    
-    // Marker de posición durante la carrera
-    if (runState.isRunning && runState.currentLocation != null) {
-       markers.add(Marker(
-        markerId: const MarkerId('runCurrent'),
-        position: runState.currentLocation!,
-        icon: _runnerIconOrange ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-        rotation: _heading,
-        flat: true,
-      ));
-    }
-
-    return markers;
-  }
-
-  Set<Polyline> _buildPolylines(RunState runState) {
-    if (runState.routePoints.length < 2) return {};
-    
-    return {
-      Polyline(
-        polylineId: const PolylineId('route'),
-        points: runState.routePoints,
-        color: runState.isCircuitClosed ? Colors.green : Colors.blue,
-        width: 5,
-        startCap: Cap.roundCap,
-        endCap: Cap.roundCap,
-      ),
-    };
-  }
-
-  // Construye el polígono de circuito cuando se cumplan las condiciones mínimas
-  Set<Polygon> _buildPolygons(RunState runState) {
-    // Reglas para considerar circuito válido
-    final meetsTime = runState.elapsed.inSeconds >= AppConstants.minRunDuration;
-    final meetsDistance = runState.distance >= AppConstants.minRunDistance;
-    final isClosed = runState.isCircuitClosed;
-
-    if (!isClosed || !meetsTime || !meetsDistance) return {};
-    if (runState.routePoints.length < 3) return {};
-
-    // Polígono simple usando la ruta tal cual; en el futuro podemos simplificarla
-    return {
-      Polygon(
-        polygonId: const PolygonId('circuit'),
-        points: runState.routePoints,
-        strokeWidth: 3,
-        strokeColor: Colors.green,
-        fillColor: Colors.green.withValues(alpha: 0.2),
-      )
-    };
-  }
-
-  // Construye polígonos para los tiles de territorio (míos o de todos)
   Set<Polygon> _buildTerritoryPolygons() {
     final currentUser = ref.read(shared_services.currentUserProvider);
     final myTiles = currentUser != null
-        ? ref.read(myTerritoryTilesProvider(currentUser.uid)).maybeWhen(data: (d) => d, orElse: () => const [])
+        ? ref.read(myTerritoryTilesProvider(currentUser.uid)).maybeWhen(
+            data: (d) => d,
+            orElse: () => const [])
         : const [];
-    final allTiles = ref.read(allTerritoryTilesProvider).maybeWhen(data: (d) => d, orElse: () => const []);
+
+    final allTiles = ref.read(allTerritoryTilesProvider).maybeWhen(
+      data: (d) => d,
+      orElse: () => const []);
 
     final tiles = _showOnlyMine ? myTiles : allTiles;
     final color = _showOnlyMine ? Colors.blue : Colors.purple;
-
     final polygons = <Polygon>{};
-    for (final t in tiles) {
-      final corners = t.toPolygonCorners();
-      polygons.add(Polygon(
-        polygonId: PolygonId('tile_${t.key}'),
-        points: corners,
-        strokeWidth: 1,
-        strokeColor: color.withValues(alpha: 0.7),
-        fillColor: color.withValues(alpha: 0.15),
-        consumeTapEvents: false,
-      ));
+
+    for (final tile in tiles) {
+      try {
+        final corners = tile.toPolygonCorners();
+        polygons.add(Polygon(
+          polygonId: PolygonId('tile_${tile.key}'),
+          points: corners,
+          strokeWidth: 1,
+          strokeColor: color.withAlpha(179),
+          fillColor: color.withAlpha(38),
+          consumeTapEvents: false,
+        ));
+      } catch (e) {
+        debugPrint('Error creating territory polygon: $e');
+      }
     }
+
     return polygons;
   }
 
-  // Eliminado panel de métricas antiguo; ahora se usa el panel flotante M3
-
-  // (eliminado) _buildMetricCard ya no se utiliza en el nuevo diseño M3
-
-  // Nueva fila compacta de métricas para el panel flotante (Material 3)
   Widget _buildMetricsRow(RunState runState) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -636,7 +614,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  // Chip compacto de métrica (Material 3) sin texto de etiqueta visible para evitar overflow
   Widget _buildMetricChip(IconData icon, String value, String label) {
     final cs = Theme.of(context).colorScheme;
     final content = Row(
@@ -652,13 +629,9 @@ class _HomePageState extends ConsumerState<HomePage> {
         ),
       ],
     );
-    // Usa el label como tooltip para accesibilidad
     return Tooltip(message: label, child: content);
   }
 
-  // (eliminado) _buildControlPanel ya no se utiliza; los controles están en el FAB
-
-  // FAB contextual según estado de la carrera (Material 3)
   Widget _buildFab(BuildContext context, RunState runState) {
     final runNotifier = ref.read(runStateProvider.notifier);
 
@@ -705,7 +678,6 @@ class _HomePageState extends ConsumerState<HomePage> {
       );
     }
 
-    // isRunning && !isPaused
     return Wrap(
       spacing: 12,
       children: [
@@ -729,7 +701,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final hours = duration.inHours;
     final minutes = duration.inMinutes % 60;
     final seconds = duration.inSeconds % 60;
-    
+
     if (hours > 0) {
       return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
     } else {

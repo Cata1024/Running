@@ -1,1 +1,59 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"running-app-uni","appId":"1:28475506464:android:2c5177b4c28647ee2c6145","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"running-app-uni","configurations":{"android":"1:28475506464:android:2c5177b4c28647ee2c6145","web":"1:28475506464:web:782c4974a284d18f2c6145","windows":"1:28475506464:web:1beaf918fc2e62642c6145"}}}}},"hosting":{"public":"build/web","ignore":["firebase.json","**/.*"],"headers":[{"source":"**/*.@(js|html|css|json|webp|jpg|jpeg|png|svg)","headers":[{"key":"Cache-Control","value":"public, max-age=604800"}]},{"source":"**/*.@(woff2|woff)","headers":[{"key":"Cache-Control","value":"public, max-age=31536000"}]},{"source":"flutter_service_worker.js","headers":[{"key":"Cache-Control","value":"no-cache"}]}]}}
+{
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "running-app-uni",
+                    "appId": "1:28475506464:android:2c5177b4c28647ee2c6145",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "running-app-uni",
+                    "configurations": {
+                        "android": "1:28475506464:android:2c5177b4c28647ee2c6145",
+                        "web": "1:28475506464:web:782c4974a284d18f2c6145",
+                        "windows": "1:28475506464:web:1beaf918fc2e62642c6145"
+                    }
+                }
+            }
+        }
+    },
+    "hosting": {
+        "public": "build/web",
+        "ignore": [
+            "firebase.json",
+            "**/.*"
+        ],
+        "headers": [
+            {
+                "source": "**/*.@(js|html|css|json|webp|jpg|jpeg|png|svg)",
+                "headers": [
+                    {
+                        "key": "Cache-Control",
+                        "value": "public, max-age=604800"
+                    }
+                ]
+            },
+            {
+                "source": "**/*.@(woff2|woff)",
+                "headers": [
+                    {
+                        "key": "Cache-Control",
+                        "value": "public, max-age=31536000"
+                    }
+                ]
+            },
+            {
+                "source": "flutter_service_worker.js",
+                "headers": [
+                    {
+                        "key": "Cache-Control",
+                        "value": "no-cache"
+                    }
+                ]
+            }
+        ]
+    }
+}

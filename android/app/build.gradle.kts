@@ -19,7 +19,33 @@ if (localPropertiesFile.exists()) {
     }
 }
 
+fun loadEnvMap(file: File): Map<String, String> {
+    if (!file.exists()) return emptyMap()
+    val map = mutableMapOf<String, String>()
+    file.readLines(Charsets.UTF_8).forEach { rawLine ->
+        val line = rawLine.trim()
+        if (line.isEmpty() || line.startsWith("#")) return@forEach
+        val separatorIndex = line.indexOf('=')
+        if (separatorIndex <= 0) return@forEach
+        val key = line.substring(0, separatorIndex).trim()
+        val value = line.substring(separatorIndex + 1).trim()
+        if (key.isNotEmpty()) {
+            map[key] = value
+        }
+    }
+    return map
+}
+
+val envFile = rootProject.file("../.env")
+val envMap = loadEnvMap(envFile)
+
+if (envMap.isEmpty()) {
+    println("[Running] GOOGLE_MAPS_API_KEY not found in ${envFile.absolutePath} (file missing or empty).")
+}
+
 val googleMapsApiKey = localProperties.getProperty("googleMapsApiKey")
+    ?: envMap["GOOGLE_MAPS_API_KEY"]
+    ?: ""
 
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -65,7 +91,12 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         
+        check(googleMapsApiKey.isNotBlank()) {
+            "GOOGLE_MAPS_API_KEY is missing. Provide it via local.properties or .env"
+        }
+
         manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
+        manifestPlaceholders["applicationActivity"] = "com.cata1024.running.MainActivity"
     }
 
     buildTypes {

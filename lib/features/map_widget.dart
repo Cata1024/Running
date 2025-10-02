@@ -1,6 +1,9 @@
-// lib/features/map_widget.dart (ARCHIVO MODIFICADO)
+// lib/features/map_widget.dart
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+import '../core/env_config.dart';
 
 /// Un contenedor de mapa optimizado que evita reconstrucciones innecesarias.
 /// Usa `AutomaticKeepAliveClientMixin` para mantener el estado del mapa.
@@ -10,7 +13,8 @@ class MapContainer extends StatefulWidget {
   final Set<Polyline> polylines;
   final Set<Polygon> polygons;
   final MapType mapType;
-  final Function(GoogleMapController)? onMapCreated;
+  final String? mapStyle;
+  final ValueChanged<GoogleMapController>? onMapCreated;
 
   const MapContainer({
     super.key,
@@ -19,6 +23,7 @@ class MapContainer extends StatefulWidget {
     required this.polylines,
     this.polygons = const {},
     this.mapType = MapType.normal,
+    this.mapStyle,
     this.onMapCreated,
   });
 
@@ -29,41 +34,52 @@ class MapContainer extends StatefulWidget {
 class MapContainerState extends State<MapContainer> with AutomaticKeepAliveClientMixin {
   GoogleMapController? _controller;
 
-  // Mantiene el estado del widget vivo, crucial para el mapa.
   @override
   bool get wantKeepAlive => true;
 
   @override
   void dispose() {
+    // Está bien llamar dispose en el controller si lo has creado.
     _controller?.dispose();
     super.dispose();
   }
   
-  // Método público para que el widget padre pueda mover la cámara.
-  void moveCamera(dynamic target, {bool animated = true}) {
+  /// Mueve la cámara usando un [CameraUpdate]. devuelve Future para poder await.
+  Future<void> moveCamera(CameraUpdate update, {bool animated = true}) async {
     if (_controller == null) return;
-    final update = target is CameraUpdate
-        ? target
-        : target is LatLng
-            ? CameraUpdate.newLatLng(target)
-            : null;
-    if (update == null) return;
-    if (animated) {
-      _controller!.animateCamera(update);
-    } else {
-      _controller!.moveCamera(update);
+    try {
+      if (animated) {
+        await _controller!.animateCamera(update);
+      } else {
+        await _controller!.moveCamera(update);
+      }
+    } catch (e) {
+      debugPrint('Error moving camera: $e');
     }
   }
 
+  /// Helper para mover la cámara a una LatLng con zoom/bearing opcional.
+  Future<void> moveCameraToLatLng(
+    LatLng target, {
+    double zoom = 17,
+    double bearing = 0,
+    bool animated = true,
+  }) =>
+      moveCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: target, zoom: zoom, bearing: bearing),
+        ),
+        animated: animated,
+      );
+
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Requerido por el mixin.
-    
+    super.build(context);
+
     return GoogleMap(
-      // Una clave estable es VITAL para evitar que Flutter lo reconstruya.
       key: const ValueKey('stable-google-map'),
       initialCameraPosition: widget.initialPosition,
-      myLocationEnabled: false, // Desactivamos el punto azul nativo para usar el nuestro.
+      myLocationEnabled: false,
       myLocationButtonEnabled: true,
       zoomControlsEnabled: true,
       mapToolbarEnabled: false,
@@ -71,9 +87,27 @@ class MapContainerState extends State<MapContainer> with AutomaticKeepAliveClien
       polylines: widget.polylines,
       polygons: widget.polygons,
       mapType: widget.mapType,
+      // NOTA: evitar usar una propiedad `style:` aquí para máxima compatibilidad.
       onMapCreated: (controller) {
         _controller = controller;
+
+        // Aplicar estilo si viene uno (compatibilidad amplia).
+        if (widget.mapStyle != null && widget.mapStyle!.isNotEmpty) {
+          try {
+            controller.setMapStyle(widget.mapStyle);
+          } catch (e) {
+            // setMapStyle puede lanzar si la versión del plugin no lo soporta
+            debugPrint('setMapStyle failed: $e');
+          }
+        }
+
         widget.onMapCreated?.call(controller);
+
+        assert(() {
+          final key = EnvConfig.instance.googleMapsApiKey;
+          debugPrint('Google Maps initialized with key (masked): ${key.isEmpty ? 'missing' : key.substring(0, 6)}***');
+          return true;
+        }());
       },
     );
   }
