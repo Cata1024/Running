@@ -16,7 +16,8 @@ class AuthScreen extends ConsumerStatefulWidget {
 class _AuthScreenState extends ConsumerState<AuthScreen> {
   bool _isLogin = true;
   bool _isLoading = false;
-  
+  bool _isGoogleLoading = false;
+
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -40,7 +41,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     try {
       final authService = ref.read(authServiceProvider);
       final firestoreService = ref.read(firestoreServiceProvider);
-      
+
       if (_isLogin) {
         await authService.signInWithEmail(
           _emailController.text.trim(),
@@ -51,8 +52,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           _emailController.text.trim(),
           _passwordController.text.trim(),
         );
-        
-        // Crear perfil básico del usuario en Firestore
+
         if (credential?.user != null) {
           final user = UserModel(
             id: credential!.user!.uid,
@@ -60,16 +60,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             displayName: credential.user!.email?.split('@').first ?? 'Runner',
             createdAt: DateTime.now(),
           );
-          
+
           await firestoreService.saveUserProfile(user);
         }
       }
-      
-      // La navegación la manejará el AuthWrapper
-      
     } on FirebaseAuthException catch (e) {
-      String message = 'Error de autenticación';
-      
+      var message = 'Error de autenticación';
+
       switch (e.code) {
         case 'user-not-found':
           message = 'Usuario no encontrado';
@@ -87,7 +84,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           message = 'Email inválido';
           break;
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message)),
@@ -103,6 +100,71 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isGoogleLoading = true;
+    });
+
+    try {
+      final authService = ref.read(authServiceProvider);
+      final firestoreService = ref.read(firestoreServiceProvider);
+
+      final credential = await authService.signInWithGoogle();
+      final user = credential?.user;
+
+      if (user == null) {
+        return;
+      }
+
+      final profile = await firestoreService.getUserProfile(user.uid);
+      if (profile == null) {
+        final newUser = UserModel(
+          id: user.uid,
+          email: user.email ?? '',
+          displayName: user.displayName ?? user.email?.split('@').first ?? 'Runner',
+          createdAt: DateTime.now(),
+          photoUrl: user.photoURL,
+        );
+        await firestoreService.saveUserProfile(newUser);
+      }
+    } on FirebaseAuthException catch (e) {
+      var message = 'Error de autenticación con Google';
+
+      switch (e.code) {
+        case 'account-exists-with-different-credential':
+          message = 'Ya existe una cuenta con otro método de acceso.';
+          break;
+        case 'invalid-credential':
+          message = 'Credenciales de Google inválidas.';
+          break;
+        case 'operation-not-allowed':
+          message = 'El acceso con Google no está habilitado.';
+          break;
+        case 'user-disabled':
+          message = 'La cuenta de Google está deshabilitada.';
+          break;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo completar el acceso con Google.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGoogleLoading = false;
         });
       }
     }
@@ -138,19 +200,19 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 Text(
                   'Territory Run',
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   _isLogin ? 'Bienvenido de vuelta' : 'Únete a la aventura',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.white70,
-                  ),
+                        color: Colors.white70,
+                      ),
                 ),
                 const SizedBox(height: 48),
-                
+
                 // Formulario
                 Card(
                   elevation: 8,
@@ -184,7 +246,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                             },
                           ),
                           const SizedBox(height: 16),
-                          
+
                           // Contraseña
                           TextFormField(
                             controller: _passwordController,
@@ -204,7 +266,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               return null;
                             },
                           ),
-                          
+
                           // Confirmar contraseña (solo registro)
                           if (!_isLogin) ...[
                             const SizedBox(height: 16),
@@ -227,25 +289,67 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                               },
                             ),
                           ],
-                          
+
                           const SizedBox(height: 24),
-                          
+
                           // Botón principal
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
-                              onPressed: _isLoading ? null : _handleAuth,
+                              onPressed: (_isLoading || _isGoogleLoading) ? null : _handleAuth,
                               child: _isLoading
-                                  ? const CircularProgressIndicator()
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
                                   : Text(_isLogin ? 'Iniciar Sesión' : 'Registrarse'),
                             ),
                           ),
-                          
+
                           const SizedBox(height: 16),
-                          
+
+                          Row(
+                            children: [
+                              const Expanded(child: Divider()),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                child: Text(
+                                  'o continúa con',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                              const Expanded(child: Divider()),
+                            ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: (_isGoogleLoading || _isLoading) ? null : _handleGoogleSignIn,
+                              icon: _isGoogleLoading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.g_mobiledata, size: 28),
+                              label: Text(
+                                _isGoogleLoading ? 'Conectando...' : 'Acceder con Google',
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
                           // Cambiar modo
                           TextButton(
-                            onPressed: _isLoading
+                            onPressed: (_isLoading || _isGoogleLoading)
                                 ? null
                                 : () {
                                     setState(() {

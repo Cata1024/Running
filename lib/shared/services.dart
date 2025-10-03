@@ -2,20 +2,23 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
 import '../models/models.dart';
 
 /// Servicio de Autenticación de Firebase
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  
+
   // Stream del estado de autenticación
   Stream<User?> get authStateChanges => _auth.authStateChanges();
-  
+
   // Usuario actual
   User? get currentUser => _auth.currentUser;
-  
+
   /// Registrar nuevo usuario con email y contraseña
-  Future<UserCredential?> registerWithEmail(String email, String password) async {
+  Future<UserCredential?> registerWithEmail(
+      String email, String password) async {
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email,
@@ -23,11 +26,11 @@ class AuthService {
       );
       return credential;
     } on FirebaseAuthException catch (e) {
-  debugPrint('Error en registro: ${e.message}');
+      debugPrint('Error en registro: ${e.message}');
       rethrow;
     }
   }
-  
+
   /// Iniciar sesión con email y contraseña
   Future<UserCredential?> signInWithEmail(String email, String password) async {
     try {
@@ -37,22 +40,101 @@ class AuthService {
       );
       return credential;
     } on FirebaseAuthException catch (e) {
-  debugPrint('Error en login: ${e.message}');
+      debugPrint('Error en login: ${e.message}');
       rethrow;
     }
   }
-  
+
+  /// Iniciar sesión con Google
+  Future<UserCredential?> signInWithGoogle() async {
+    try {
+      if (kIsWeb) {
+        final googleProvider = GoogleAuthProvider();
+        googleProvider
+          ..addScope('email')
+          ..setCustomParameters({'prompt': 'select_account'});
+        final credential = await _auth.signInWithPopup(googleProvider);
+        return credential;
+      }
+
+      final googleSignIn = GoogleSignIn();
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        return null; // Usuario canceló la selección
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      return await _auth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Error en login con Google: ${e.message}');
+      rethrow;
+    }
+  }
+
+  /// Vincular credenciales de email/contraseña a la cuenta actual (ej. usuario creado con Google)
+  Future<UserCredential?> linkEmailPassword(
+      String email, String password) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError(
+          'No hay un usuario autenticado para vincular credenciales.');
+    }
+
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: password,
+      );
+      final result = await user.linkWithCredential(credential);
+      await user.reload();
+      return result;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Error vinculando email/contraseña: ${e.code} - ${e.message}');
+      rethrow;
+    }
+  }
+
+  /// Forzar recarga del usuario actual para obtener datos actualizados (providers, claims, etc.)
+  Future<void> reloadUser() async {
+    try {
+      await _auth.currentUser?.reload();
+    } catch (e) {
+      debugPrint('Error recargando usuario: $e');
+    }
+  }
+
+  /// Indica si la cuenta actual ya tiene vinculado el proveedor de email/contraseña
+  bool get hasEmailPasswordProvider {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return false;
+    }
+    return user.providerData
+        .any((info) => info.providerId == EmailAuthProvider.PROVIDER_ID);
+  }
+
   /// Cerrar sesión
   Future<void> signOut() async {
     await _auth.signOut();
+    if (!kIsWeb) {
+      try {
+        await GoogleSignIn().signOut();
+      } catch (e) {
+        debugPrint('Error cerrando sesión de Google: $e');
+      }
+    }
   }
-  
+
   /// Restablecer contraseña
   Future<void> resetPassword(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
     } on FirebaseAuthException catch (e) {
-  debugPrint('Error al restablecer contraseña: ${e.message}');
+      debugPrint('Error al restablecer contraseña: ${e.message}');
       rethrow;
     }
   }
@@ -61,7 +143,7 @@ class AuthService {
 /// Servicio de Firestore para Territory Run
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   /// Crear/actualizar perfil de usuario
   Future<void> saveUserProfile(UserModel user) async {
     try {
@@ -70,11 +152,11 @@ class FirestoreService {
           .doc(user.id)
           .set(user.toMap(), SetOptions(merge: true));
     } catch (e) {
-  debugPrint('Error guardando perfil de usuario: $e');
+      debugPrint('Error guardando perfil de usuario: $e');
       rethrow;
     }
   }
-  
+
   /// Obtener perfil de usuario
   Future<UserModel?> getUserProfile(String userId) async {
     try {
@@ -84,30 +166,26 @@ class FirestoreService {
       }
       return null;
     } catch (e) {
-  debugPrint('Error obteniendo perfil de usuario: $e');
+      debugPrint('Error obteniendo perfil de usuario: $e');
       rethrow;
     }
   }
-  
+
   /// Stream del perfil de usuario
   Stream<UserModel?> getUserProfileStream(String userId) {
-    return _firestore
-        .collection('users')
-        .doc(userId)
-        .snapshots()
-        .map((doc) {
+    return _firestore.collection('users').doc(userId).snapshots().map((doc) {
       if (doc.exists && doc.data() != null) {
         return UserModel.fromMap(doc.data()!, userId);
       }
       return null;
     });
   }
-  
+
   /// Guardar carrera
   Future<String> saveRun(RunModel run) async {
     try {
       final runData = run.toMap();
-      
+
       if (run.id.isEmpty) {
         // Nueva carrera
         final docRef = await _firestore
@@ -115,10 +193,10 @@ class FirestoreService {
             .doc(run.userId)
             .collection('runs')
             .add(runData);
-        
+
         // Actualizar estadísticas del usuario
         await _updateUserStats(run.userId, run);
-        
+
         return docRef.id;
       } else {
         // Actualizar carrera existente
@@ -131,11 +209,11 @@ class FirestoreService {
         return run.id;
       }
     } catch (e) {
-  debugPrint('Error guardando carrera: $e');
+      debugPrint('Error guardando carrera: $e');
       rethrow;
     }
   }
-  
+
   /// Obtener carreras del usuario
   Future<List<RunModel>> getUserRuns(String userId, {int limit = 20}) async {
     try {
@@ -146,16 +224,16 @@ class FirestoreService {
           .orderBy('startTime', descending: true)
           .limit(limit)
           .get();
-      
+
       return query.docs
           .map((doc) => RunModel.fromMap(doc.data(), doc.id))
           .toList();
     } catch (e) {
-  debugPrint('Error obteniendo carreras: $e');
+      debugPrint('Error obteniendo carreras: $e');
       rethrow;
     }
   }
-  
+
   /// Stream de carreras del usuario
   Stream<List<RunModel>> getUserRunsStream(String userId, {int limit = 10}) {
     return _firestore
@@ -169,7 +247,7 @@ class FirestoreService {
             .map((doc) => RunModel.fromMap(doc.data(), doc.id))
             .toList());
   }
-  
+
   /// Obtener una carrera específica
   Future<RunModel?> getRun(String userId, String runId) async {
     try {
@@ -179,17 +257,17 @@ class FirestoreService {
           .collection('runs')
           .doc(runId)
           .get();
-      
+
       if (doc.exists && doc.data() != null) {
         return RunModel.fromMap(doc.data()!, doc.id);
       }
       return null;
     } catch (e) {
-  debugPrint('Error obteniendo carrera: $e');
+      debugPrint('Error obteniendo carrera: $e');
       rethrow;
     }
   }
-  
+
   /// Eliminar carrera
   Future<void> deleteRun(String userId, String runId) async {
     try {
@@ -200,32 +278,32 @@ class FirestoreService {
           .doc(runId)
           .delete();
     } catch (e) {
-  debugPrint('Error eliminando carrera: $e');
+      debugPrint('Error eliminando carrera: $e');
       rethrow;
     }
   }
-  
+
   /// Actualizar estadísticas del usuario después de una carrera
   Future<void> _updateUserStats(String userId, RunModel run) async {
     try {
       final userRef = _firestore.collection('users').doc(userId);
-      
+
       await _firestore.runTransaction((transaction) async {
         final userDoc = await transaction.get(userRef);
-        
+
         if (userDoc.exists) {
           final userData = userDoc.data()!;
           final currentUser = UserModel.fromMap(userData, userId);
-          
+
           // Calcular nuevas estadísticas
           final newTotalRuns = currentUser.totalRuns + 1;
           final newTotalDistance = currentUser.totalDistance + run.distance;
           final newTotalTime = currentUser.totalTime + run.duration;
           final newExperience = currentUser.experience + run.experienceGained;
-          
+
           // Calcular nivel basado en experiencia
           final newLevel = (newExperience / 1000).floor() + 1;
-          
+
           // Actualizar timestamp de actividad
           final updates = {
             'totalRuns': newTotalRuns,
@@ -235,16 +313,16 @@ class FirestoreService {
             'level': newLevel,
             'lastActivityAt': DateTime.now().toIso8601String(),
           };
-          
+
           transaction.update(userRef, updates);
         }
       });
     } catch (e) {
-  debugPrint('Error actualizando estadísticas del usuario: $e');
+      debugPrint('Error actualizando estadísticas del usuario: $e');
       rethrow;
     }
   }
-  
+
   /// Obtener ranking de usuarios por distancia
   Future<List<UserModel>> getLeaderboard({int limit = 10}) async {
     try {
@@ -253,29 +331,33 @@ class FirestoreService {
           .orderBy('totalDistance', descending: true)
           .limit(limit)
           .get();
-      
-    return query.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList();
+
+      return query.docs
+          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+          .toList();
     } catch (e) {
-  debugPrint('Error obteniendo ranking: $e');
+      debugPrint('Error obteniendo ranking: $e');
       rethrow;
     }
   }
-  
+
   /// Buscar usuarios por nombre
   Future<List<UserModel>> searchUsers(String query, {int limit = 10}) async {
     try {
       // Nota: Firestore no soporta búsqueda de texto completo nativamente
       // Esta es una implementación básica que busca por el inicio del displayName
-    final snapshot = await _firestore
-      .collection('users')
-      .where('displayName', isGreaterThanOrEqualTo: query)
-      .where('displayName', isLessThan: '$query\uf8ff')
-      .limit(limit)
-      .get();
-      
-      return snapshot.docs.map((doc) => UserModel.fromMap(doc.data(), doc.id)).toList();
+      final snapshot = await _firestore
+          .collection('users')
+          .where('displayName', isGreaterThanOrEqualTo: query)
+          .where('displayName', isLessThan: '$query\uf8ff')
+          .limit(limit)
+          .get();
+
+      return snapshot.docs
+          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
+          .toList();
     } catch (e) {
-  debugPrint('Error buscando usuarios: $e');
+      debugPrint('Error buscando usuarios: $e');
       rethrow;
     }
   }
@@ -284,7 +366,8 @@ class FirestoreService {
 // Providers de Riverpod para los servicios
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
-final firestoreServiceProvider = Provider<FirestoreService>((ref) => FirestoreService());
+final firestoreServiceProvider =
+    Provider<FirestoreService>((ref) => FirestoreService());
 
 // Provider para el stream de autenticación
 final authStateProvider = StreamProvider<User?>((ref) {
@@ -308,7 +391,7 @@ final currentUserProfileProvider = StreamProvider<UserModel?>((ref) {
   if (currentUser == null) {
     return Stream.value(null);
   }
-  
+
   final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.getUserProfileStream(currentUser.uid);
 });
@@ -319,7 +402,7 @@ final userRunsProvider = StreamProvider<List<RunModel>>((ref) {
   if (currentUser == null) {
     return Stream.value([]);
   }
-  
+
   final firestoreService = ref.watch(firestoreServiceProvider);
   return firestoreService.getUserRunsStream(currentUser.uid);
 });

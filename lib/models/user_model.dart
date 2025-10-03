@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 /// Modelo de usuario para Territory Run
 class UserModel {
   final String id;
@@ -12,6 +14,12 @@ class UserModel {
   final List<String> achievements;
   final String? photoUrl;
   final DateTime? lastActivityAt;
+  final DateTime? birthDate;
+  final double? weightKg;
+  final int? heightCm;
+  final String? gender;
+  final String preferredUnits;
+  final String? goalDescription;
 
   const UserModel({
     required this.id,
@@ -26,6 +34,12 @@ class UserModel {
     this.achievements = const [],
     this.photoUrl,
     this.lastActivityAt,
+    this.birthDate,
+    this.weightKg,
+    this.heightCm,
+    this.gender,
+    this.preferredUnits = 'metric',
+    this.goalDescription,
   });
 
   /// Crear desde mapa (Firestore)
@@ -34,23 +48,25 @@ class UserModel {
       id: id,
       email: map['email'] ?? '',
       displayName: map['displayName'] ?? 'Runner',
-      createdAt: map['createdAt'] is String
-          ? DateTime.parse(map['createdAt'])
-          : DateTime.fromMillisecondsSinceEpoch(
-              map['createdAt']?.millisecondsSinceEpoch ?? 0),
+      createdAt: _parseDate(map['createdAt']) ?? DateTime.now(),
       totalRuns: map['totalRuns'] ?? 0,
-      totalDistance: (map['totalDistance'] ?? 0.0).toDouble(),
+      totalDistance: (map['totalDistance'] ?? 0).toDouble(),
       totalTime: map['totalTime'] ?? 0,
       level: map['level'] ?? 1,
       experience: map['experience'] ?? 0,
       achievements: List<String>.from(map['achievements'] ?? []),
       photoUrl: map['photoUrl'],
-      lastActivityAt: map['lastActivityAt'] != null
-          ? (map['lastActivityAt'] is String
-              ? DateTime.parse(map['lastActivityAt'])
-              : DateTime.fromMillisecondsSinceEpoch(
-                  map['lastActivityAt'].millisecondsSinceEpoch))
+      lastActivityAt: _parseDate(map['lastActivityAt']),
+      birthDate: _parseDate(map['birthDate']),
+      weightKg: map['weightKg'] != null
+          ? (map['weightKg'] is int
+              ? (map['weightKg'] as int).toDouble()
+              : (map['weightKg'] as num).toDouble())
           : null,
+      heightCm: map['heightCm'] != null ? (map['heightCm'] as num).round() : null,
+      gender: map['gender'],
+      preferredUnits: map['preferredUnits'] ?? 'metric',
+      goalDescription: map['goalDescription'],
     );
   }
 
@@ -68,6 +84,12 @@ class UserModel {
       'achievements': achievements,
       'photoUrl': photoUrl,
       'lastActivityAt': lastActivityAt?.toIso8601String(),
+      'birthDate': birthDate?.toIso8601String(),
+      'weightKg': weightKg,
+      'heightCm': heightCm,
+      'gender': gender,
+      'preferredUnits': preferredUnits,
+      'goalDescription': goalDescription,
     };
   }
 
@@ -85,6 +107,12 @@ class UserModel {
     List<String>? achievements,
     String? photoUrl,
     DateTime? lastActivityAt,
+    DateTime? birthDate,
+    double? weightKg,
+    int? heightCm,
+    String? gender,
+    String? preferredUnits,
+    String? goalDescription,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -99,6 +127,12 @@ class UserModel {
       achievements: achievements ?? this.achievements,
       photoUrl: photoUrl ?? this.photoUrl,
       lastActivityAt: lastActivityAt ?? this.lastActivityAt,
+      birthDate: birthDate ?? this.birthDate,
+      weightKg: weightKg ?? this.weightKg,
+      heightCm: heightCm ?? this.heightCm,
+      gender: gender ?? this.gender,
+      preferredUnits: preferredUnits ?? this.preferredUnits,
+      goalDescription: goalDescription ?? this.goalDescription,
     );
   }
 
@@ -129,10 +163,43 @@ class UserModel {
     return (currentProgress / levelRange).clamp(0.0, 1.0);
   }
 
-  @override
-  String toString() {
-    return 'UserModel(id: $id, displayName: $displayName, level: $level, '
-           'totalRuns: $totalRuns, totalDistance: ${totalDistance.toStringAsFixed(1)}km)';
+  /// Edad calculada a partir de la fecha de nacimiento
+  int? get age {
+    if (birthDate == null) return null;
+    final now = DateTime.now();
+    var years = now.year - birthDate!.year;
+    final hasHadBirthday = (now.month > birthDate!.month) ||
+        (now.month == birthDate!.month && now.day >= birthDate!.day);
+    if (!hasHadBirthday) {
+      years -= 1;
+    }
+    return years;
+  }
+
+  /// Índice de masa corporal (IMC) estimado, o null si faltan datos
+  double? get bmi {
+    if (weightKg == null || heightCm == null || heightCm == 0) return null;
+    final heightMeters = heightCm! / 100;
+    return weightKg! / (heightMeters * heightMeters);
+  }
+
+  /// Verifica si la información básica del perfil está completa
+  bool get isProfileComplete {
+    return birthDate != null &&
+        weightKg != null &&
+        heightCm != null &&
+        displayName.trim().isNotEmpty;
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
+    if (value is num) {
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    }
+    return null;
   }
 
   @override
@@ -140,7 +207,6 @@ class UserModel {
     if (identical(this, other)) return true;
     return other is UserModel && other.id == id;
   }
-
   @override
   int get hashCode => id.hashCode;
 }

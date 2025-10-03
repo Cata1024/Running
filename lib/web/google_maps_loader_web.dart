@@ -10,7 +10,8 @@ Future<void> initializeGoogleMaps(String apiKey) {
 
   final completer = Completer<void>();
 
-  final existing = html.document.head?.querySelector('script[data-google-maps]');
+  final existing =
+      html.document.head?.querySelector('script[data-google-maps]');
   if (existing != null) {
     completer.complete();
     _mapsLoader = completer;
@@ -22,7 +23,8 @@ Future<void> initializeGoogleMaps(String apiKey) {
     ..async = true
     ..defer = true
     ..dataset['googleMaps'] = 'true'
-    ..src = 'https://maps.googleapis.com/maps/api/js?key=$apiKey&libraries=places';
+    ..src =
+        'https://maps.googleapis.com/maps/api/js?key=$apiKey&libraries=places';
 
   script.onError.listen((event) {
     if (!completer.isCompleted) {
