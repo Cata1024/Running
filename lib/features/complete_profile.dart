@@ -252,7 +252,7 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _selectedGender,
+                  initialValue: _selectedGender,
                   items: const [
                     DropdownMenuItem(value: 'female', child: Text('Femenino')),
                     DropdownMenuItem(value: 'male', child: Text('Masculino')),
@@ -271,7 +271,7 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _preferredUnits,
+                  initialValue: _preferredUnits,
                   items: const [
                     DropdownMenuItem(value: 'metric', child: Text('Sistema métrico (km, kg)')),
                     DropdownMenuItem(value: 'imperial', child: Text('Sistema imperial (mi, lb)')),

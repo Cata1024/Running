@@ -14,6 +14,8 @@ class RunModel {
   final double averagePace; // min/km
   final int calories;
   final List<TerritoryPoint> capturedTerritory;
+  final double? territoryArea; // metros cuadrados
+  final List<LatLng>? territoryPolygon;
   final Map<String, dynamic>? metadata;
   final bool synced;
   final DateTime createdAt;
@@ -31,6 +33,8 @@ class RunModel {
     this.averagePace = 0.0,
     this.calories = 0,
     this.capturedTerritory = const [],
+    this.territoryArea,
+    this.territoryPolygon,
     this.metadata,
     this.synced = false,
     required this.createdAt,
@@ -66,6 +70,13 @@ class RunModel {
       capturedTerritory: (map['capturedTerritory'] as List<dynamic>? ?? [])
           .map((territory) => TerritoryPoint.fromMap(territory))
           .toList(),
+      territoryArea: (map['territoryArea'] as num?)?.toDouble(),
+      territoryPolygon: (map['territoryPolygon'] as List<dynamic>? ?? [])
+          .map((point) => LatLng(
+                point['latitude']?.toDouble() ?? 0.0,
+                point['longitude']?.toDouble() ?? 0.0,
+              ))
+          .toList(),
       metadata: map['metadata'],
       synced: map['synced'] ?? false,
       createdAt: map['createdAt'] is String
@@ -73,31 +84,6 @@ class RunModel {
           : DateTime.fromMillisecondsSinceEpoch(
               map['createdAt']?.millisecondsSinceEpoch ?? 0),
     );
-  }
-
-  /// Convertir a mapa (Firestore)
-  Map<String, dynamic> toMap() {
-    return {
-      'userId': userId,
-      'startTime': startTime.toIso8601String(),
-      'endTime': endTime?.toIso8601String(),
-      'route': route
-          .map((point) => {
-                'latitude': point.latitude,
-                'longitude': point.longitude,
-              })
-          .toList(),
-      'distance': distance,
-      'duration': duration,
-      'averageSpeed': averageSpeed,
-      'maxSpeed': maxSpeed,
-      'averagePace': averagePace,
-      'calories': calories,
-      'capturedTerritory': capturedTerritory.map((t) => t.toMap()).toList(),
-      'metadata': metadata,
-      'synced': synced,
-      'createdAt': createdAt.toIso8601String(),
-    };
   }
 
   /// Crear copia con cambios
@@ -114,6 +100,8 @@ class RunModel {
     double? averagePace,
     int? calories,
     List<TerritoryPoint>? capturedTerritory,
+    double? territoryArea,
+    List<LatLng>? territoryPolygon,
     Map<String, dynamic>? metadata,
     bool? synced,
     DateTime? createdAt,
@@ -131,6 +119,8 @@ class RunModel {
       averagePace: averagePace ?? this.averagePace,
       calories: calories ?? this.calories,
       capturedTerritory: capturedTerritory ?? this.capturedTerritory,
+      territoryArea: territoryArea ?? this.territoryArea,
+      territoryPolygon: territoryPolygon ?? this.territoryPolygon,
       metadata: metadata ?? this.metadata,
       synced: synced ?? this.synced,
       createdAt: createdAt ?? this.createdAt,
@@ -153,6 +143,39 @@ class RunModel {
     } else {
       return '${seconds}s';
     }
+  }
+
+  /// Convertir a mapa (Firestore)
+  Map<String, dynamic> toMap() {
+    return {
+      'userId': userId,
+      'startTime': startTime.toIso8601String(),
+      'endTime': endTime?.toIso8601String(),
+      'route': route
+          .map((point) => {
+                'latitude': point.latitude,
+                'longitude': point.longitude,
+              })
+          .toList(),
+      'distance': distance,
+      'duration': duration,
+      'averageSpeed': averageSpeed,
+      'maxSpeed': maxSpeed,
+      'averagePace': averagePace,
+      'calories': calories,
+      'capturedTerritory': capturedTerritory.map((t) => t.toMap()).toList(),
+      if (territoryArea != null) 'territoryArea': territoryArea,
+      if (territoryPolygon != null)
+        'territoryPolygon': territoryPolygon!
+            .map((point) => {
+                  'latitude': point.latitude,
+                  'longitude': point.longitude,
+                })
+            .toList(),
+      'metadata': metadata,
+      'synced': synced,
+      'createdAt': createdAt.toIso8601String(),
+    };
   }
 
   /// Obtener ritmo formateado

@@ -1,12 +1,42 @@
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../core/constants.dart';
 import '../models/territory_models.dart';
 
 class TerritoryService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  /// Calcula un polígono utilizable y el área que encierra a partir de un polyline existente.
+  ///
+  /// No modifica la lista original; devuelve un resultado derivado para usos de visualización o métricas.
+  TerritoryPolygonResult? deriveTerritoryFromPolyline({
+    required List<LatLng> polyline,
+    bool closePathIfNeeded = true,
+  }) {
+    if (polyline.length < 3) {
+      return null;
+    }
+
+    final polygon = <LatLng>[
+      for (final point in polyline) LatLng(point.latitude, point.longitude),
+    ];
+
+    if (closePathIfNeeded && !_pointsApproximatelyEqual(polygon.first, polygon.last)) {
+      polygon.add(polygon.first);
+    }
+
+    final area = _computePolygonAreaSquareMeters(polygon);
+    if (area <= 0) {
+      return null;
+    }
+
+    return TerritoryPolygonResult(
+      polygon: List<LatLng>.unmodifiable(polygon),
+      areaSquareMeters: area,
+    );
+  }
 
   // Convierte un track (lista de puntos) en un conjunto de tiles reclamados
   Future<Set<TerritoryTile>> computeTilesFromTrack({
@@ -92,7 +122,7 @@ class TerritoryService {
     final m = _mercatorFromLatLng(lat, lng);
     final x = (m.x / tileSizeMeters).floor();
     final y = (m.y / tileSizeMeters).floor();
-  return 'm_${tileSizeMeters.toStringAsFixed(0)}_${x}_$y';
+    return 'm_${tileSizeMeters.toStringAsFixed(0)}_${x}_$y';
   }
 
   double _tileCenterLat(String key) {
@@ -135,6 +165,16 @@ const double _earthRadiusMeters = 6378137.0;
 class _MetersPoint { final double x; final double y; const _MetersPoint(this.x, this.y); }
 class _GeoPoint { final double lat; final double lng; const _GeoPoint(this.lat, this.lng); }
 
+class TerritoryPolygonResult {
+  final List<LatLng> polygon;
+  final double areaSquareMeters;
+
+  const TerritoryPolygonResult({
+    required this.polygon,
+    required this.areaSquareMeters,
+  });
+}
+
 _MetersPoint _mercatorFromLatLng(double lat, double lng) {
   final x = _earthRadiusMeters * _degToRad(lng);
   final y = _earthRadiusMeters * math.log(math.tan(math.pi / 4 + _degToRad(lat) / 2));
@@ -149,3 +189,26 @@ _GeoPoint _latLngFromMercator(double x, double y) {
 
 double _degToRad(double deg) => deg * math.pi / 180.0;
 double _radToDeg(double rad) => rad * 180.0 / math.pi;
+
+double _computePolygonAreaSquareMeters(List<LatLng> polygon) {
+  if (polygon.length < 3) {
+    return 0;
+  }
+
+  final projected = polygon.map((p) => _mercatorFromLatLng(p.latitude, p.longitude)).toList();
+  double sum = 0;
+
+  for (var i = 0; i < projected.length; i++) {
+    final nextIndex = (i + 1) % projected.length;
+    final current = projected[i];
+    final next = projected[nextIndex];
+    sum += (current.x * next.y) - (next.x * current.y);
+  }
+
+  return sum.abs() * 0.5;
+}
+
+bool _pointsApproximatelyEqual(LatLng a, LatLng b, {double tolerance = 1e-6}) {
+  return (a.latitude - b.latitude).abs() <= tolerance &&
+      (a.longitude - b.longitude).abs() <= tolerance;
+}

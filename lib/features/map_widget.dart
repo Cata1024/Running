@@ -15,6 +15,9 @@ class MapContainer extends StatefulWidget {
   final MapType mapType;
   final String? mapStyle;
   final ValueChanged<GoogleMapController>? onMapCreated;
+  final ValueChanged<CameraPosition>? onCameraMove;
+  final bool myLocationButtonEnabled;
+  final bool zoomControlsEnabled;
 
   const MapContainer({
     super.key,
@@ -25,6 +28,9 @@ class MapContainer extends StatefulWidget {
     this.mapType = MapType.normal,
     this.mapStyle,
     this.onMapCreated,
+    this.onCameraMove,
+    this.myLocationButtonEnabled = false,
+    this.zoomControlsEnabled = false,
   });
 
   @override
@@ -58,6 +64,23 @@ class MapContainerState extends State<MapContainer> with AutomaticKeepAliveClien
     }
   }
 
+  /// Ajusta la cámara para mostrar los bounds dados con padding (en píxeles)
+  Future<void> moveCameraToBounds(LatLngBounds bounds, {double padding = 50}) async {
+    if (_controller == null) return;
+    try {
+      await _controller!.animateCamera(CameraUpdate.newLatLngBounds(bounds, padding));
+    } catch (e) {
+      // Algunas plataformas pueden lanzar si los bounds son inválidos; intentar centrado simple
+      try {
+        final center = LatLng((bounds.northeast.latitude + bounds.southwest.latitude) / 2,
+            (bounds.northeast.longitude + bounds.southwest.longitude) / 2);
+        await _controller!.animateCamera(CameraUpdate.newLatLng(center));
+      } catch (e) {
+        debugPrint('Error moving camera to bounds: $e');
+      }
+    }
+  }
+
   /// Helper para mover la cámara a una LatLng con zoom/bearing opcional.
   Future<void> moveCameraToLatLng(
     LatLng target, {
@@ -80,9 +103,12 @@ class MapContainerState extends State<MapContainer> with AutomaticKeepAliveClien
       key: const ValueKey('stable-google-map'),
       initialCameraPosition: widget.initialPosition,
       myLocationEnabled: false,
-      myLocationButtonEnabled: true,
-      zoomControlsEnabled: true,
+      myLocationButtonEnabled: widget.myLocationButtonEnabled,
+      zoomControlsEnabled: widget.zoomControlsEnabled,
       mapToolbarEnabled: false,
+      compassEnabled: false,
+      rotateGesturesEnabled: false,
+      tiltGesturesEnabled: false,
       markers: widget.markers,
       polylines: widget.polylines,
       polygons: widget.polygons,
@@ -91,14 +117,9 @@ class MapContainerState extends State<MapContainer> with AutomaticKeepAliveClien
       onMapCreated: (controller) {
         _controller = controller;
 
-        // Aplicar estilo si viene uno (compatibilidad amplia).
         if (widget.mapStyle != null && widget.mapStyle!.isNotEmpty) {
-          try {
-            controller.setMapStyle(widget.mapStyle);
-          } catch (e) {
-            // setMapStyle puede lanzar si la versión del plugin no lo soporta
-            debugPrint('setMapStyle failed: $e');
-          }
+          // ignore: deprecated_member_use
+          controller.setMapStyle(widget.mapStyle);
         }
 
         widget.onMapCreated?.call(controller);
@@ -108,6 +129,9 @@ class MapContainerState extends State<MapContainer> with AutomaticKeepAliveClien
           debugPrint('Google Maps initialized with key (masked): ${key.isEmpty ? 'missing' : key.substring(0, 6)}***');
           return true;
         }());
+      },
+      onCameraMove: (position) {
+        widget.onCameraMove?.call(position);
       },
     );
   }

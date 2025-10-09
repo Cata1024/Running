@@ -9,6 +9,7 @@ import '../models/models.dart';
 /// Servicio de Autenticación de Firebase
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  static bool _googleSignInInitialized = false;
 
   // Stream del estado de autenticación
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -57,18 +58,33 @@ class AuthService {
         return credential;
       }
 
-      final googleSignIn = GoogleSignIn();
-      final googleUser = await googleSignIn.signIn();
-      if (googleUser == null) {
-        return null; // Usuario canceló la selección
+      await _ensureGoogleSignInInitialized();
+
+      final account = await GoogleSignIn.instance.authenticate();
+      final idToken = account.authentication.idToken;
+
+      if (idToken == null) {
+        throw FirebaseAuthException(
+          code: 'missing-id-token',
+          message: 'No se recibió idToken de Google.',
+        );
       }
 
-      final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+        idToken: idToken,
       );
+
       return await _auth.signInWithCredential(credential);
+    } on GoogleSignInException catch (e) {
+      // Cancelaciones no deben considerarse errores graves
+      if (e.code == GoogleSignInExceptionCode.canceled ||
+          e.code == GoogleSignInExceptionCode.interrupted ||
+          e.code == GoogleSignInExceptionCode.uiUnavailable) {
+        debugPrint('Inicio de sesión con Google cancelado o interrumpido: ${e.code}');
+        return null;
+      }
+      debugPrint('Error en login con Google (plugin): ${e.code} - ${e.description}');
+      rethrow;
     } on FirebaseAuthException catch (e) {
       debugPrint('Error en login con Google: ${e.message}');
       rethrow;
@@ -117,12 +133,22 @@ class AuthService {
         .any((info) => info.providerId == EmailAuthProvider.PROVIDER_ID);
   }
 
+  Future<void> _ensureGoogleSignInInitialized() async {
+    if (_googleSignInInitialized) {
+      return;
+    }
+
+    await GoogleSignIn.instance.initialize();
+    _googleSignInInitialized = true;
+  }
+
   /// Cerrar sesión
   Future<void> signOut() async {
     await _auth.signOut();
     if (!kIsWeb) {
       try {
-        await GoogleSignIn().signOut();
+        await _ensureGoogleSignInInitialized();
+        await GoogleSignIn.instance.signOut();
       } catch (e) {
         debugPrint('Error cerrando sesión de Google: $e');
       }
