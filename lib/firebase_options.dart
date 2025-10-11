@@ -85,5 +85,4 @@ class DefaultFirebaseOptions {
     storageBucket: 'running-app-uni.firebasestorage.app',
     measurementId: 'G-5V28JJCBSJ',
   );
-
 }

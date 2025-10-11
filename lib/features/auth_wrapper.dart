@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'auth.dart';
-import 'root_shell.dart';
-import 'complete_profile.dart';
+
 import '../shared/services.dart';
+import 'auth.dart';
+import 'complete_profile.dart';
+import 'root_shell.dart';
 
 class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
@@ -11,7 +12,7 @@ class AuthWrapper extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
-    
+
     return authState.when(
       data: (user) {
         if (user == null) {

@@ -1,5 +1,5 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../core/polyline_utils.dart';
+import '../shared/utils/geo_utils.dart';
 
 /// Modelo de ruta para polylines encoded
 class RouteModel {
@@ -48,9 +48,10 @@ class RouteModel {
 
   /// Convertir a mapa para Firestore
   Map<String, dynamic> toMap() {
+    final route = decodedPoints;
     return {
       'ownerId': ownerId,
-      'encodedPolyline': encodedPolyline,
+      'encodedPolyline': GeoUtils.encodePolyline(route),
       'distanceKm': distanceKm,
       'durationSec': durationSec,
       'createdAt': createdAt.toIso8601String(),
@@ -64,7 +65,7 @@ class RouteModel {
   List<LatLng> get decodedPoints {
     if (encodedPolyline.isEmpty) return [];
     try {
-      return PolylineUtils.decodePolyline(encodedPolyline);
+      return GeoUtils.decodePolyline(encodedPolyline);
     } catch (e) {
       // Manejar errores de decodificación
       return [];

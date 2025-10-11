@@ -63,7 +63,8 @@ class UserModel {
               ? (map['weightKg'] as int).toDouble()
               : (map['weightKg'] as num).toDouble())
           : null,
-      heightCm: map['heightCm'] != null ? (map['heightCm'] as num).round() : null,
+      heightCm:
+          map['heightCm'] != null ? (map['heightCm'] as num).round() : null,
       gender: map['gender'],
       preferredUnits: map['preferredUnits'] ?? 'metric',
       goalDescription: map['goalDescription'],
@@ -158,7 +159,7 @@ class UserModel {
     final nextLevelExp = nextLevelExperience;
     final currentProgress = experience - currentLevelExp;
     final levelRange = nextLevelExp - currentLevelExp;
-    
+
     if (levelRange == 0) return 1.0;
     return (currentProgress / levelRange).clamp(0.0, 1.0);
   }
@@ -207,6 +208,7 @@ class UserModel {
     if (identical(this, other)) return true;
     return other is UserModel && other.id == id;
   }
+
   @override
   int get hashCode => id.hashCode;
 }

@@ -16,7 +16,8 @@ class EnvConfig {
   /// Firebase Web
   String get firebaseApiKeyWeb => _get('FIREBASE_API_KEY_WEB');
   String get firebaseAppIdWeb => _get('FIREBASE_APP_ID_WEB');
-  String get firebaseMessagingSenderIdWeb => _get('FIREBASE_MESSAGING_SENDER_ID_WEB');
+  String get firebaseMessagingSenderIdWeb =>
+      _get('FIREBASE_MESSAGING_SENDER_ID_WEB');
   String get firebaseProjectIdWeb => _get('FIREBASE_PROJECT_ID_WEB');
   String get firebaseAuthDomainWeb => _get('FIREBASE_AUTH_DOMAIN_WEB');
   String get firebaseStorageBucketWeb => _get('FIREBASE_STORAGE_BUCKET_WEB');
@@ -25,9 +26,11 @@ class EnvConfig {
   /// Firebase Android
   String get firebaseApiKeyAndroid => _get('FIREBASE_API_KEY_ANDROID');
   String get firebaseAppIdAndroid => _get('FIREBASE_APP_ID_ANDROID');
-  String get firebaseMessagingSenderIdAndroid => _get('FIREBASE_MESSAGING_SENDER_ID_ANDROID');
+  String get firebaseMessagingSenderIdAndroid =>
+      _get('FIREBASE_MESSAGING_SENDER_ID_ANDROID');
   String get firebaseProjectIdAndroid => _get('FIREBASE_PROJECT_ID_ANDROID');
-  String get firebaseStorageBucketAndroid => _get('FIREBASE_STORAGE_BUCKET_ANDROID');
+  String get firebaseStorageBucketAndroid =>
+      _get('FIREBASE_STORAGE_BUCKET_ANDROID');
 
   /// Google Maps
   String get googleMapsApiKey => _get('GOOGLE_MAPS_API_KEY');
@@ -40,9 +43,12 @@ class EnvConfig {
         appId: firebaseAppIdWeb,
         messagingSenderId: firebaseMessagingSenderIdWeb,
         projectId: firebaseProjectIdWeb,
-        authDomain: firebaseAuthDomainWeb.isEmpty ? null : firebaseAuthDomainWeb,
-        storageBucket: firebaseStorageBucketWeb.isEmpty ? null : firebaseStorageBucketWeb,
-        measurementId: firebaseMeasurementIdWeb.isEmpty ? null : firebaseMeasurementIdWeb,
+        authDomain:
+            firebaseAuthDomainWeb.isEmpty ? null : firebaseAuthDomainWeb,
+        storageBucket:
+            firebaseStorageBucketWeb.isEmpty ? null : firebaseStorageBucketWeb,
+        measurementId:
+            firebaseMeasurementIdWeb.isEmpty ? null : firebaseMeasurementIdWeb,
       );
     }
 
@@ -52,11 +58,14 @@ class EnvConfig {
         appId: firebaseAppIdAndroid,
         messagingSenderId: firebaseMessagingSenderIdAndroid,
         projectId: firebaseProjectIdAndroid,
-        storageBucket: firebaseStorageBucketAndroid.isEmpty ? null : firebaseStorageBucketAndroid,
+        storageBucket: firebaseStorageBucketAndroid.isEmpty
+            ? null
+            : firebaseStorageBucketAndroid,
       );
     }
 
-    throw UnsupportedError('EnvConfig.firebaseOptions not configured for this platform.');
+    throw UnsupportedError(
+        'EnvConfig.firebaseOptions not configured for this platform.');
   }
 }
 
@@ -72,7 +81,8 @@ Future<void> initFirebase() async {
     debugPrint('[EnvConfig] Firebase initialized with ${options.projectId}.');
   } on FirebaseException catch (e) {
     if (e.code == 'duplicate-app') {
-      debugPrint('[EnvConfig] Firebase default app already exists, continuing.');
+      debugPrint(
+          '[EnvConfig] Firebase default app already exists, continuing.');
     } else {
       rethrow;
     }
@@ -84,7 +94,8 @@ Future<void> configureGoogleMaps() async {
   if (kIsWeb) {
     final key = EnvConfig.instance.googleMapsApiKey;
     if (key.isEmpty) {
-      throw StateError('GOOGLE_MAPS_API_KEY is missing in .env for web initialization');
+      throw StateError(
+          'GOOGLE_MAPS_API_KEY is missing in .env for web initialization');
     }
     await initializeGoogleMaps(key);
   }

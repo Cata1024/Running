@@ -5,15 +5,16 @@ class AppConstants {
   // Configuración de la aplicación
   static const String appName = 'Territory Run';
   static const String appVersion = '1.0.0';
-  
+
   // Google Maps API Keys delegadas a EnvConfig
   static String get googleMapsApiKeyWeb => EnvConfig.instance.googleMapsApiKey;
-  static String get googleMapsApiKeyAndroid => EnvConfig.instance.googleMapsApiKey;
+  static String get googleMapsApiKeyAndroid =>
+      EnvConfig.instance.googleMapsApiKey;
   static String get googleMapsApiKeyIOS => EnvConfig.instance.googleMapsApiKey;
-  
+
   // API Key genérica (web por defecto)
   static String get googleMapsApiKey => EnvConfig.instance.googleMapsApiKey;
-  
+
   // Configuración de territory
   static const double circuitCloseRadius = 50.0; // metros
   static const int minRunDuration = 300; // 5 minutos en segundos
@@ -21,50 +22,35 @@ class AppConstants {
   // Configuración GPS
   static const int gpsUpdateInterval = 1000; // milisegundos
   static const double gpsAccuracyThreshold = 20.0; // metros
-  
+
   // Configuración de tiles
   static const double tileSize = 250.0; // metros por tile
   static const int maxZoomLevel = 18;
-  
+
   // Configuración de privacidad
   static const double defaultHomeRadius = 300.0; // metros
-  
+
   // Colores del tema
   static const int primaryColorValue = 0xFF2E7D32;
   static const int accentColorValue = 0xFF4CAF50;
-  
+
   // URLs y endpoints
   static const String termsUrl = 'https://territory-run.web.app/terms';
   static const String privacyUrl = 'https://territory-run.web.app/privacy';
-  
+
   // Límites y validaciones
-  static const double maxSpeedKmh = 30.0; // Velocidad máxima para detección de fraude
+  static const double maxSpeedKmh =
+      30.0; // Velocidad máxima para detección de fraude
   static const int maxRunDurationHours = 6; // Máximo 6 horas de carrera
-  static const double minDistanceBetweenPoints = 5.0; // metros mínimos entre puntos GPS
+  static const double minDistanceBetweenPoints =
+      5.0; // metros mínimos entre puntos GPS
 }
 
 /// Enums para diferentes estados de la aplicación
-enum RunStatus {
-  notStarted,
-  running,
-  paused,
-  completed,
-  error
-}
+enum RunStatus { notStarted, running, paused, completed, error }
 
-enum CircuitStatus {
-  open,
-  closed,
-  invalid
-}
+enum CircuitStatus { open, closed, invalid }
 
-enum PrivacyLevel {
-  private,
-  linkOnly,
-  public
-}
+enum PrivacyLevel { private, linkOnly, public }
 
-enum Units {
-  metric,
-  imperial
-}
+enum Units { metric, imperial }

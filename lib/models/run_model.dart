@@ -181,10 +181,10 @@ class RunModel {
   /// Obtener ritmo formateado
   String get formattedPace {
     if (averagePace == 0.0) return '--:--';
-    
+
     final minutes = averagePace.floor();
     final seconds = ((averagePace - minutes) * 60).round();
-    
+
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
@@ -197,7 +197,7 @@ class RunModel {
   @override
   String toString() {
     return 'RunModel(id: $id, distance: ${distance.toStringAsFixed(1)}km, '
-           'duration: $formattedDuration, date: ${startTime.toLocal()})';
+        'duration: $formattedDuration, date: ${startTime.toLocal()})';
   }
 
   @override
@@ -252,9 +252,9 @@ class TerritoryPoint {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    return other is TerritoryPoint && 
-           other.position == position && 
-           other.capturedAt == capturedAt;
+    return other is TerritoryPoint &&
+        other.position == position &&
+        other.capturedAt == capturedAt;
   }
 
   @override

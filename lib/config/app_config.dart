@@ -10,17 +10,22 @@ class AppConfig {
   // Firebase Web
   String get firebaseWebApiKey => _getOrThrow('FIREBASE_API_KEY_WEB');
   String get firebaseWebAppId => _getOrThrow('FIREBASE_APP_ID_WEB');
-  String get firebaseWebMessagingSenderId => _getOrThrow('FIREBASE_MESSAGING_SENDER_ID_WEB');
+  String get firebaseWebMessagingSenderId =>
+      _getOrThrow('FIREBASE_MESSAGING_SENDER_ID_WEB');
   String get firebaseWebProjectId => _getOrThrow('FIREBASE_PROJECT_ID_WEB');
   String get firebaseWebAuthDomain => _getOrThrow('FIREBASE_AUTH_DOMAIN_WEB');
-  String get firebaseWebStorageBucket => _getOrThrow('FIREBASE_STORAGE_BUCKET_WEB');
-  String get firebaseWebMeasurementId => _getOrThrow('FIREBASE_MEASUREMENT_ID_WEB');
+  String get firebaseWebStorageBucket =>
+      _getOrThrow('FIREBASE_STORAGE_BUCKET_WEB');
+  String get firebaseWebMeasurementId =>
+      _getOrThrow('FIREBASE_MEASUREMENT_ID_WEB');
 
   // Firebase Android
   String get firebaseAndroidApiKey => _getOrThrow('FIREBASE_API_KEY_ANDROID');
   String get firebaseAndroidAppId => _getOrThrow('FIREBASE_APP_ID_ANDROID');
-  String get firebaseAndroidMessagingSenderId => _getOrThrow('FIREBASE_MESSAGING_SENDER_ID_ANDROID');
-  String get firebaseAndroidProjectId => _getOrThrow('FIREBASE_PROJECT_ID_ANDROID');
+  String get firebaseAndroidMessagingSenderId =>
+      _getOrThrow('FIREBASE_MESSAGING_SENDER_ID_ANDROID');
+  String get firebaseAndroidProjectId =>
+      _getOrThrow('FIREBASE_PROJECT_ID_ANDROID');
 
   // Google Maps
   String? get googleMapsApiKey => dotenv.env['GOOGLE_MAPS_API_KEY'];

@@ -28,7 +28,8 @@ class TerritoryTile {
       updatedAt: map['updatedAt'] is String
           ? DateTime.parse(map['updatedAt'])
           : DateTime.fromMillisecondsSinceEpoch(
-              map['updatedAt']?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch,
+              map['updatedAt']?.millisecondsSinceEpoch ??
+                  DateTime.now().millisecondsSinceEpoch,
             ),
     );
   }
@@ -64,18 +65,29 @@ class TerritoryTile {
 // Utilidades Mercator (EPSG:3857)
 const double _earthRadiusMeters = 6378137.0; // radio WGS84
 
-class _MetersPoint { final double x; final double y; const _MetersPoint(this.x, this.y); }
-class _GeoPoint { final double lat; final double lng; const _GeoPoint(this.lat, this.lng); }
+class _MetersPoint {
+  final double x;
+  final double y;
+  const _MetersPoint(this.x, this.y);
+}
+
+class _GeoPoint {
+  final double lat;
+  final double lng;
+  const _GeoPoint(this.lat, this.lng);
+}
 
 _MetersPoint _mercatorFromLatLng(double lat, double lng) {
   final x = _earthRadiusMeters * _degToRad(lng);
-  final y = _earthRadiusMeters * math.log(math.tan(math.pi / 4 + _degToRad(lat) / 2));
+  final y =
+      _earthRadiusMeters * math.log(math.tan(math.pi / 4 + _degToRad(lat) / 2));
   return _MetersPoint(x, y);
 }
 
 _GeoPoint _latLngFromMercator(double x, double y) {
   final lng = _radToDeg(x / _earthRadiusMeters);
-  final lat = _radToDeg(2 * math.atan(math.exp(y / _earthRadiusMeters)) - math.pi / 2);
+  final lat =
+      _radToDeg(2 * math.atan(math.exp(y / _earthRadiusMeters)) - math.pi / 2);
   return _GeoPoint(lat, lng);
 }
 

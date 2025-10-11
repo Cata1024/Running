@@ -1,10 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../models/user_model.dart';
 import '../shared/services.dart';
+import 'complete_profile/widgets/complete_profile_form.dart';
 
 class CompleteProfilePage extends ConsumerStatefulWidget {
   const CompleteProfilePage({super.key, this.existingProfile});
@@ -12,7 +12,8 @@ class CompleteProfilePage extends ConsumerStatefulWidget {
   final UserModel? existingProfile;
 
   @override
-  ConsumerState<CompleteProfilePage> createState() => _CompleteProfilePageState();
+  ConsumerState<CompleteProfilePage> createState() =>
+      _CompleteProfilePageState();
 }
 
 class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
@@ -37,15 +38,21 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
     final user = FirebaseAuth.instance.currentUser;
 
     _nameController = TextEditingController(
-      text: profile?.displayName ?? user?.displayName ?? user?.email?.split('@').first ?? '',
+      text: profile?.displayName ??
+          user?.displayName ??
+          user?.email?.split('@').first ??
+          '',
     );
     _weightController = TextEditingController(
-      text: profile?.weightKg != null ? profile!.weightKg!.toStringAsFixed(1) : '',
+      text: profile?.weightKg != null
+          ? profile!.weightKg!.toStringAsFixed(1)
+          : '',
     );
     _heightController = TextEditingController(
       text: profile?.heightCm?.toString() ?? '',
     );
-    _goalController = TextEditingController(text: profile?.goalDescription ?? '');
+    _goalController =
+        TextEditingController(text: profile?.goalDescription ?? '');
     _photoUrlController = TextEditingController(
       text: profile?.photoUrl ?? user?.photoURL ?? '',
     );
@@ -68,7 +75,8 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
 
   Future<void> _pickBirthDate() async {
     final now = DateTime.now();
-    final initialDate = _birthDate ?? DateTime(now.year - 25, now.month, now.day);
+    final initialDate =
+        _birthDate ?? DateTime(now.year - 25, now.month, now.day);
     final firstDate = DateTime(now.year - 100);
     final lastDate = DateTime(now.year - 13, now.month, now.day);
 
@@ -115,7 +123,8 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sesión expirada. Inicia sesión nuevamente.')),
+        const SnackBar(
+            content: Text('Sesión expirada. Inicia sesión nuevamente.')),
       );
       return;
     }
@@ -190,11 +199,6 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dateLabel = _birthDate != null
-        ? DateFormat.yMMMMd('es').format(_birthDate!)
-        : 'Selecciona tu fecha de nacimiento';
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Completa tu perfil'),
@@ -209,137 +213,38 @@ class _CompleteProfilePageState extends ConsumerState<CompleteProfilePage> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '¡Bienvenido! Necesitamos algunos datos para personalizar tu experiencia.',
-                  style: theme.textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _nameController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Ingresa tu nombre';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: _isSubmitting ? null : _pickBirthDate,
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Fecha de nacimiento',
-                      border: OutlineInputBorder(),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(dateLabel),
-                        const Icon(Icons.calendar_today_outlined),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedGender,
-                  items: const [
-                    DropdownMenuItem(value: 'female', child: Text('Femenino')),
-                    DropdownMenuItem(value: 'male', child: Text('Masculino')),
-                    DropdownMenuItem(value: 'non_binary', child: Text('No binario')),
-                    DropdownMenuItem(value: 'prefer_not', child: Text('Prefiero no decirlo')),
-                  ],
-                  onChanged: _isSubmitting
-                      ? null
-                      : (value) {
-                          setState(() => _selectedGender = value);
-                        },
-                  decoration: const InputDecoration(
-                    labelText: 'Género (opcional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _preferredUnits,
-                  items: const [
-                    DropdownMenuItem(value: 'metric', child: Text('Sistema métrico (km, kg)')),
-                    DropdownMenuItem(value: 'imperial', child: Text('Sistema imperial (mi, lb)')),
-                  ],
-                  onChanged: _isSubmitting
-                      ? null
-                      : (value) {
-                          if (value != null) {
-                            setState(() => _preferredUnits = value);
-                          }
-                        },
-                  decoration: const InputDecoration(
-                    labelText: 'Sistema de medidas',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _weightController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Peso (kg)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _heightController,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Altura (cm)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _goalController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Objetivo personal (opcional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _photoUrlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Foto de perfil (URL, opcional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _isSubmitting ? null : _submit,
-                    icon: _isSubmitting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save),
-                    label: Text(_isSubmitting ? 'Guardando…' : 'Guardar y continuar'),
-                  ),
-                ),
-              ],
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CompleteProfileForm(
+                formKey: _formKey,
+                nameController: _nameController,
+                weightController: _weightController,
+                heightController: _heightController,
+                goalController: _goalController,
+                photoUrlController: _photoUrlController,
+                birthDate: _birthDate,
+                selectedGender: _selectedGender,
+                preferredUnits: _preferredUnits,
+                isSubmitting: _isSubmitting,
+                onPickBirthDate: _pickBirthDate,
+                onGenderChanged: (value) => setState(() => _selectedGender = value),
+                onUnitsChanged: (value) => setState(() => _preferredUnits = value),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: _isSubmitting ? null : _submit,
+                icon: _isSubmitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save),
+                label:
+                    Text(_isSubmitting ? 'Guardando…' : 'Guardar y continuar'),
+              ),
+            ],
           ),
         ),
       ),

@@ -4,22 +4,22 @@ import 'package:flutter/material.dart';
 class WebOptimizations {
   // Detecta plataforma
   static bool get isWeb => kIsWeb;
-  
+
   // Configuraciones según plataforma
-  static Duration get animationDuration => 
-      kIsWeb ? const Duration(milliseconds: 200) : const Duration(milliseconds: 300);
-      
-  static Curve get animationCurve => 
-      kIsWeb ? Curves.easeOut : Curves.easeInOut;
-      
+  static Duration get animationDuration => kIsWeb
+      ? const Duration(milliseconds: 200)
+      : const Duration(milliseconds: 300);
+
+  static Curve get animationCurve => kIsWeb ? Curves.easeOut : Curves.easeInOut;
+
   static bool get useComplexAnimations => !kIsWeb;
-  
+
   static bool get useHeavyShadows => !kIsWeb;
-  
+
   // Optimizador de carga de datos
-  static int paginationLimit(int standard) => 
+  static int paginationLimit(int standard) =>
       kIsWeb ? (standard ~/ 2).clamp(5, 20) : standard;
-      
+
   // Optimizador de UI
   static EdgeInsets responsivePadding(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
@@ -30,11 +30,10 @@ class WebOptimizations {
     }
     return const EdgeInsets.all(12.0);
   }
-  
+
   // Detector de rendimiento
   static bool get useWebRateLimiter => kIsWeb;
-  
+
   // Control de debounce (actualiza solo cada X ms)
-  static Duration get webThrottleDuration => 
-      const Duration(milliseconds: 100);
+  static Duration get webThrottleDuration => const Duration(milliseconds: 100);
 }

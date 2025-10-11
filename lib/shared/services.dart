@@ -1,170 +1,13 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
-
-/// Servicio de Autenticación de Firebase
-class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  static bool _googleSignInInitialized = false;
-
-  // Stream del estado de autenticación
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
-
-  // Usuario actual
-  User? get currentUser => _auth.currentUser;
-
-  /// Registrar nuevo usuario con email y contraseña
-  Future<UserCredential?> registerWithEmail(
-      String email, String password) async {
-    try {
-      final credential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      return credential;
-    } on FirebaseAuthException catch (e) {
-      debugPrint('Error en registro: ${e.message}');
-      rethrow;
-    }
-  }
-
-  /// Iniciar sesión con email y contraseña
-  Future<UserCredential?> signInWithEmail(String email, String password) async {
-    try {
-      final credential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      return credential;
-    } on FirebaseAuthException catch (e) {
-      debugPrint('Error en login: ${e.message}');
-      rethrow;
-    }
-  }
-
-  /// Iniciar sesión con Google
-  Future<UserCredential?> signInWithGoogle() async {
-    try {
-      if (kIsWeb) {
-        final googleProvider = GoogleAuthProvider();
-        googleProvider
-          ..addScope('email')
-          ..setCustomParameters({'prompt': 'select_account'});
-        final credential = await _auth.signInWithPopup(googleProvider);
-        return credential;
-      }
-
-      await _ensureGoogleSignInInitialized();
-
-      final account = await GoogleSignIn.instance.authenticate();
-      final idToken = account.authentication.idToken;
-
-      if (idToken == null) {
-        throw FirebaseAuthException(
-          code: 'missing-id-token',
-          message: 'No se recibió idToken de Google.',
-        );
-      }
-
-      final credential = GoogleAuthProvider.credential(
-        idToken: idToken,
-      );
-
-      return await _auth.signInWithCredential(credential);
-    } on GoogleSignInException catch (e) {
-      // Cancelaciones no deben considerarse errores graves
-      if (e.code == GoogleSignInExceptionCode.canceled ||
-          e.code == GoogleSignInExceptionCode.interrupted ||
-          e.code == GoogleSignInExceptionCode.uiUnavailable) {
-        debugPrint('Inicio de sesión con Google cancelado o interrumpido: ${e.code}');
-        return null;
-      }
-      debugPrint('Error en login con Google (plugin): ${e.code} - ${e.description}');
-      rethrow;
-    } on FirebaseAuthException catch (e) {
-      debugPrint('Error en login con Google: ${e.message}');
-      rethrow;
-    }
-  }
-
-  /// Vincular credenciales de email/contraseña a la cuenta actual (ej. usuario creado con Google)
-  Future<UserCredential?> linkEmailPassword(
-      String email, String password) async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw StateError(
-          'No hay un usuario autenticado para vincular credenciales.');
-    }
-
-    try {
-      final credential = EmailAuthProvider.credential(
-        email: email,
-        password: password,
-      );
-      final result = await user.linkWithCredential(credential);
-      await user.reload();
-      return result;
-    } on FirebaseAuthException catch (e) {
-      debugPrint('Error vinculando email/contraseña: ${e.code} - ${e.message}');
-      rethrow;
-    }
-  }
-
-  /// Forzar recarga del usuario actual para obtener datos actualizados (providers, claims, etc.)
-  Future<void> reloadUser() async {
-    try {
-      await _auth.currentUser?.reload();
-    } catch (e) {
-      debugPrint('Error recargando usuario: $e');
-    }
-  }
-
-  /// Indica si la cuenta actual ya tiene vinculado el proveedor de email/contraseña
-  bool get hasEmailPasswordProvider {
-    final user = _auth.currentUser;
-    if (user == null) {
-      return false;
-    }
-    return user.providerData
-        .any((info) => info.providerId == EmailAuthProvider.PROVIDER_ID);
-  }
-
-  Future<void> _ensureGoogleSignInInitialized() async {
-    if (_googleSignInInitialized) {
-      return;
-    }
-
-    await GoogleSignIn.instance.initialize();
-    _googleSignInInitialized = true;
-  }
-
-  /// Cerrar sesión
-  Future<void> signOut() async {
-    await _auth.signOut();
-    if (!kIsWeb) {
-      try {
-        await _ensureGoogleSignInInitialized();
-        await GoogleSignIn.instance.signOut();
-      } catch (e) {
-        debugPrint('Error cerrando sesión de Google: $e');
-      }
-    }
-  }
-
-  /// Restablecer contraseña
-  Future<void> resetPassword(String email) async {
-    try {
-      await _auth.sendPasswordResetEmail(email: email);
-    } on FirebaseAuthException catch (e) {
-      debugPrint('Error al restablecer contraseña: ${e.message}');
-      rethrow;
-    }
-  }
-}
+import '../services/auth/auth_service.dart';
+export '../services/auth/auth_service.dart'
+    show AuthService, authServiceProvider, authStateProvider, currentUserProvider;
+export '../services/routes/routes_service.dart'
+    show RoutesService, routesServiceProvider, userRoutesProvider, allRoutesProvider;
 
 /// Servicio de Firestore para Territory Run
 class FirestoreService {
@@ -389,27 +232,8 @@ class FirestoreService {
   }
 }
 
-// Providers de Riverpod para los servicios
-final authServiceProvider = Provider<AuthService>((ref) => AuthService());
-
 final firestoreServiceProvider =
     Provider<FirestoreService>((ref) => FirestoreService());
-
-// Provider para el stream de autenticación
-final authStateProvider = StreamProvider<User?>((ref) {
-  final authService = ref.watch(authServiceProvider);
-  return authService.authStateChanges;
-});
-
-// Provider para el usuario actual
-final currentUserProvider = Provider<User?>((ref) {
-  final authState = ref.watch(authStateProvider);
-  return authState.when(
-    data: (user) => user,
-    loading: () => null,
-    error: (error, stack) => null,
-  );
-});
 
 // Provider para el perfil del usuario actual
 final currentUserProfileProvider = StreamProvider<UserModel?>((ref) {

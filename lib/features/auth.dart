@@ -1,8 +1,12 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../shared/services.dart';
+
 import '../models/models.dart';
+import '../shared/services.dart';
+import 'auth/widgets/auth_background.dart';
+import 'auth/widgets/auth_form.dart';
+import 'auth/widgets/auth_header.dart';
 import 'home.dart';
 
 /// Pantalla de autenticación principal
@@ -126,7 +130,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         final newUser = UserModel(
           id: user.uid,
           email: user.email ?? '',
-          displayName: user.displayName ?? user.email?.split('@').first ?? 'Runner',
+          displayName:
+              user.displayName ?? user.email?.split('@').first ?? 'Runner',
           createdAt: DateTime.now(),
           photoUrl: user.photoURL,
         );
@@ -158,7 +163,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No se pudo completar el acceso con Google.')),
+          const SnackBar(
+              content: Text('No se pudo completar el acceso con Google.')),
         );
       }
     } finally {
@@ -173,209 +179,39 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Theme.of(context).colorScheme.primary,
-              Theme.of(context).colorScheme.secondary,
-            ],
-          ),
-        ),
+      body: AuthBackground(
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Logo/Título
-                const Icon(
-                  Icons.running_with_errors,
-                  size: 80,
-                  color: Colors.white,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Territory Run',
-                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _isLogin ? 'Bienvenido de vuelta' : 'Únete a la aventura',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Colors.white70,
-                      ),
-                ),
-                const SizedBox(height: 48),
-
-                // Formulario
-                Card(
-                  elevation: 8,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          // Email
-                          TextFormField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: const InputDecoration(
-                              labelText: 'Email',
-                              prefixIcon: Icon(Icons.email),
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Ingresa tu email';
-                              }
-                              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                                  .hasMatch(value)) {
-                                return 'Email inválido';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Contraseña
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Contraseña',
-                              prefixIcon: Icon(Icons.lock),
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Ingresa tu contraseña';
-                              }
-                              if (!_isLogin && value.length < 6) {
-                                return 'Mínimo 6 caracteres';
-                              }
-                              return null;
-                            },
-                          ),
-
-                          // Confirmar contraseña (solo registro)
-                          if (!_isLogin) ...[
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _confirmPasswordController,
-                              obscureText: true,
-                              decoration: const InputDecoration(
-                                labelText: 'Confirmar contraseña',
-                                prefixIcon: Icon(Icons.lock_outline),
-                                border: OutlineInputBorder(),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Confirma tu contraseña';
-                                }
-                                if (value != _passwordController.text) {
-                                  return 'Las contraseñas no coinciden';
-                                }
-                                return null;
-                              },
-                            ),
-                          ],
-
-                          const SizedBox(height: 24),
-
-                          // Botón principal
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: (_isLoading || _isGoogleLoading) ? null : _handleAuth,
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : Text(_isLogin ? 'Iniciar Sesión' : 'Registrarse'),
-                            ),
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          Row(
-                            children: [
-                              const Expanded(child: Divider()),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                child: Text(
-                                  'o continúa con',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ),
-                              const Expanded(child: Divider()),
-                            ],
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: (_isGoogleLoading || _isLoading) ? null : _handleGoogleSignIn,
-                              icon: _isGoogleLoading
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.g_mobiledata, size: 28),
-                              label: Text(
-                                _isGoogleLoading ? 'Conectando...' : 'Acceder con Google',
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Cambiar modo
-                          TextButton(
-                            onPressed: (_isLoading || _isGoogleLoading)
-                                ? null
-                                : () {
-                                    setState(() {
-                                      _isLogin = !_isLogin;
-                                      _formKey.currentState?.reset();
-                                    });
-                                  },
-                            child: Text(_isLogin
-                                ? '¿No tienes cuenta? Regístrate'
-                                : '¿Ya tienes cuenta? Inicia sesión'),
-                          ),
-                          
-                          // Restablecer contraseña (solo login)
-                          if (_isLogin)
-                            TextButton(
-                              onPressed: _isLoading
-                                  ? null
-                                  : () => _showResetPasswordDialog(),
-                              child: const Text('¿Olvidaste tu contraseña?'),
-                            ),
-                        ],
-                      ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AuthHeader(isLogin: _isLogin),
+                    const SizedBox(height: 48),
+                    AuthForm(
+                      formKey: _formKey,
+                      emailController: _emailController,
+                      passwordController: _passwordController,
+                      confirmPasswordController: _confirmPasswordController,
+                      isLogin: _isLogin,
+                      isLoading: _isLoading,
+                      isGoogleLoading: _isGoogleLoading,
+                      onSubmit: _handleAuth,
+                      onToggleMode: () {
+                        setState(() {
+                          _isLogin = !_isLogin;
+                          _formKey.currentState?.reset();
+                        });
+                      },
+                      onGoogleSignIn: _handleGoogleSignIn,
+                      onForgotPassword: _showResetPasswordDialog,
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -385,7 +221,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   void _showResetPasswordDialog() {
     final emailController = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -393,7 +229,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Ingresa tu email para recibir un enlace de restablecimiento'),
+            const Text(
+                'Ingresa tu email para recibir un enlace de restablecimiento'),
             const SizedBox(height: 16),
             TextFormField(
               controller: emailController,
@@ -421,7 +258,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Email enviado. Revisa tu bandeja de entrada.'),
+                        content: Text(
+                            'Email enviado. Revisa tu bandeja de entrada.'),
                       ),
                     );
                   }
@@ -449,7 +287,7 @@ class AuthWrapper extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
-    
+
     return authState.when(
       data: (user) {
         if (user != null) {

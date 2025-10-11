@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../home.dart';
+import '../../home/providers/run_state_provider.dart';
 import 'glass_panel.dart';
+import 'route_picker_sheet.dart';
 
 class RunControlDock extends ConsumerWidget {
   final RunState runState;
+  final bool wrapInPanel;
 
-  const RunControlDock({super.key, required this.runState});
+  const RunControlDock({
+    super.key,
+    required this.runState,
+    this.wrapInPanel = true,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -56,6 +62,22 @@ class RunControlDock extends ConsumerWidget {
       );
     }
 
+    Future<void> openRoutePicker() async {
+      final result = await showModalBottomSheet<RoutePickerSelection>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (context) => const RoutePickerSheet(),
+      );
+
+      if (result == null) return;
+      if (result.clearSelection) {
+        runNotifier.clearPlannedRoute();
+      } else if (result.route != null) {
+        runNotifier.selectPlannedRoute(result.route!);
+      }
+    }
+
     Widget content;
 
     if (!runState.locationPermissionGranted) {
@@ -80,9 +102,7 @@ class RunControlDock extends ConsumerWidget {
           buildSecondaryButton(
             icon: Icons.route,
             label: 'Rutas',
-            onPressed: () {
-              // TODO: abrir selector de rutas
-            },
+            onPressed: openRoutePicker,
           ),
         ],
       );
@@ -126,12 +146,73 @@ class RunControlDock extends ConsumerWidget {
       );
     }
 
+    final plannedRoute = runState.plannedRoute;
+
+    Widget body = content;
+
+    if (plannedRoute != null) {
+      final theme = Theme.of(context);
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        plannedRoute.title?.isNotEmpty == true
+                            ? plannedRoute.title!
+                            : 'Ruta planificada',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${plannedRoute.distanceKm.toStringAsFixed(1)} km · ${(plannedRoute.durationSec / 60).round()} min',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Quitar ruta planificada',
+                  icon: Icon(Icons.close,
+                      color: theme.colorScheme.onPrimaryContainer),
+                  onPressed: runNotifier.clearPlannedRoute,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          content,
+        ],
+      );
+    }
+
+    if (!wrapInPanel) {
+      return body;
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: GlassPanel(
         borderRadius: BorderRadius.circular(28),
         padding: const EdgeInsets.all(16),
-        child: content,
+        child: body,
       ),
     );
   }

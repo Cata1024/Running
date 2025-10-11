@@ -35,20 +35,20 @@ class GlassPanel extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                (overlayColor ?? colorScheme.surface.withOpacity(0.24)),
-                (overlayColor ?? colorScheme.surface.withOpacity(0.08)),
+                (overlayColor ?? colorScheme.surface.withValues(alpha: 0.24)),
+                (overlayColor ?? colorScheme.surface.withValues(alpha: 0.08)),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             border: Border.all(
-              color: colorScheme.onSurface.withOpacity(0.08),
+              color: colorScheme.onSurface.withValues(alpha: 0.08),
               width: 1.2,
             ),
             borderRadius: borderRadius.resolve(TextDirection.ltr),
             boxShadow: [
               BoxShadow(
-                color: colorScheme.surfaceTint.withOpacity(0.12),
+                color: colorScheme.surfaceTint.withValues(alpha: 0.12),
                 blurRadius: 30,
                 offset: const Offset(0, 10),
               ),
