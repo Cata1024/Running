@@ -2,8 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 
-import '../web/google_maps_loader_stub.dart'
-    if (dart.library.html) '../web/google_maps_loader_web.dart';
 
 /// Runtime configuration sourced from `.env`.
 class EnvConfig {
@@ -94,9 +92,9 @@ Future<void> configureGoogleMaps() async {
   if (kIsWeb) {
     final key = EnvConfig.instance.googleMapsApiKey;
     if (key.isEmpty) {
-      throw StateError(
-          'GOOGLE_MAPS_API_KEY is missing in .env for web initialization');
+      debugPrint('[EnvConfig] GOOGLE_MAPS_API_KEY is missing in .env');
+    } else {
+      debugPrint('[EnvConfig] Google Maps API Key configured: ${key.substring(0, 8)}...');
     }
-    await initializeGoogleMaps(key);
   }
 }

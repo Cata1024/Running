@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'core/env_config.dart';
-import 'core/theme.dart';
-import 'features/auth_wrapper.dart';
+import 'firebase_options.dart';
+import 'core/theme/app_theme.dart';
+import 'presentation/navigation/app_router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
-  await initFirebase();
-  await configureGoogleMaps();
+  
+  // Inicializar Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   await initializeDateFormatting('es');
   await initializeDateFormatting('en');
 
@@ -23,21 +27,27 @@ Future<void> main() async {
   );
 }
 
-class RunningApp extends StatelessWidget {
+class RunningApp extends ConsumerWidget {
   const RunningApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(routerProvider);
+    
+    // Configurar orientación y barra de estado
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    
     return DynamicColorBuilder(
       builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
-        final lightScheme = lightDynamic?.harmonized();
-        final darkScheme = darkDynamic?.harmonized();
-
-        return MaterialApp(
+        return MaterialApp.router(
           title: 'Territory Run',
-          theme: AppTheme.light(lightScheme),
-          darkTheme: AppTheme.dark(darkScheme),
+          theme: AppTheme.light(lightDynamic),
+          darkTheme: AppTheme.dark(darkDynamic),
           themeMode: ThemeMode.system,
+          routerConfig: router,
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
@@ -47,7 +57,6 @@ class RunningApp extends StatelessWidget {
             Locale('es'),
             Locale('en'),
           ],
-          home: const AuthWrapper(),
           debugShowCheckedModeBanner: false,
         );
       },
