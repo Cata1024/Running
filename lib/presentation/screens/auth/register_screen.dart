@@ -45,7 +45,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       );
       
       if (mounted) {
-        context.go('/home');
+        context.go('/map');
       }
     } on AppError catch (e) {
       _showErrorSnackBar(e.message);

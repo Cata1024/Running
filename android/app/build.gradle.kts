@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -116,4 +117,9 @@ flutter {
 // Forzar toolchain de Kotlin/Java a JDK 21
 kotlin {
     jvmToolchain(21)
+}
+
+dependencies {
+    implementation(platform("com.google.firebase:firebase-bom:34.4.0"))
+    implementation("com.google.firebase:firebase-analytics")
 }

@@ -93,7 +93,7 @@ class _GlassButtonState extends State<GlassButton>
 
     final defaultBgColor = widget.backgroundColor ?? (widget.isOutlined
         ? Colors.transparent
-        : (isDark ? Colors.white.withOpacity(0.1) : Colors.white.withOpacity(0.9)));
+        : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.9)));
 
     return GestureDetector(
       onTapDown: _handleTapDown,
@@ -126,7 +126,7 @@ class _GlassButtonState extends State<GlassButton>
                   if (!widget.isOutlined && !_isPressed)
                     BoxShadow(
                       color: (defaultGradient?.colors.first ?? 
-                          AppTheme.primaryGradientStart).withOpacity(0.3),
+                          AppTheme.primaryGradientStart).withValues(alpha: 0.3),
                       blurRadius: 20,
                       spreadRadius: -5,
                       offset: const Offset(0, 10),
@@ -262,8 +262,8 @@ class _GlassIconButtonState extends State<GlassIconButton>
               borderRadius: BorderRadius.circular(widget.size / 2),
               backgroundColor: widget.backgroundColor ?? 
                   (isDark 
-                      ? Colors.white.withOpacity(0.1)
-                      : Colors.white.withOpacity(0.8)),
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.white.withValues(alpha: 0.8)),
               child: Center(
                 child: widget.isLoading
                     ? SizedBox(

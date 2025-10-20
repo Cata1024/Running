@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:turf/turf.dart' as turf;
 
@@ -64,52 +63,42 @@ class TerritoryService {
     }
   }
 
-  Future<Map<String, dynamic>> updateUserTerritory({
-    required String uid,
+  Map<String, dynamic> mergeTerritory({
+    Map<String, dynamic>? existing,
     required Map<String, dynamic> newPolygon,
     required double areaGainedM2,
-  }) async {
-    final docRef = FirebaseFirestore.instance.collection('territory').doc(uid);
-    final snap = await docRef.get();
-
+  }) {
+    Map<String, dynamic>? existingGeoJson = existing?['unionGeoJson'];
     Map<String, dynamic> unionGeoJson;
-    double totalArea;
 
-    if (snap.exists) {
-      final data = snap.data() as Map<String, dynamic>;
-      final existing = data['unionGeoJson'];
-      // Append as MultiPolygon (fallback until turf.union is available in Dart)
-      if (existing == null) {
-        unionGeoJson = newPolygon;
-      } else if (existing['type'] == 'Polygon') {
-        unionGeoJson = {
-          'type': 'MultiPolygon',
-          'coordinates': [existing['coordinates'], newPolygon['coordinates']],
-        };
-      } else if (existing['type'] == 'MultiPolygon') {
-        final List<dynamic> coords = List<dynamic>.from(existing['coordinates']);
-        coords.add(newPolygon['coordinates']);
-        unionGeoJson = {
-          'type': 'MultiPolygon',
-          'coordinates': coords,
-        };
-      } else {
-        unionGeoJson = newPolygon;
-      }
-
-      // Recompute total area from unionGeoJson using turf.area
-      totalArea = _geoJsonArea(unionGeoJson);
+    if (existingGeoJson == null) {
+      unionGeoJson = newPolygon;
+    } else if (existingGeoJson['type'] == 'Polygon') {
+      unionGeoJson = {
+        'type': 'MultiPolygon',
+        'coordinates': [existingGeoJson['coordinates'], newPolygon['coordinates']],
+      };
+    } else if (existingGeoJson['type'] == 'MultiPolygon') {
+      final List<dynamic> coords = List<dynamic>.from(existingGeoJson['coordinates']);
+      coords.add(newPolygon['coordinates']);
+      unionGeoJson = {
+        'type': 'MultiPolygon',
+        'coordinates': coords,
+      };
     } else {
       unionGeoJson = newPolygon;
-      totalArea = polygonAreaM2(newPolygon);
     }
 
-    final updated = {
+    final totalArea = _geoJsonArea(unionGeoJson);
+
+    final updated = <String, dynamic>{
+      if (existing?['createdAt'] != null) 'createdAt': existing!['createdAt'],
       'unionGeoJson': unionGeoJson,
       'totalAreaM2': totalArea,
       'updatedAt': DateTime.now().toIso8601String(),
+      'lastAreaGainM2': areaGainedM2,
     };
-    await docRef.set(updated);
+
     return updated;
   }
 

@@ -1,16 +1,17 @@
-import 'dart:typed_data';
+import 'dart:math' as math;
 import 'dart:ui';
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../../core/widgets/glass_button.dart';
+import '../../../core/widgets/stat_card.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 
@@ -26,6 +27,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   bool _uploading = false;
   late final AnimationController _avatarPulseController;
   bool _fabOpen = false;
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  String _formatDuration(int seconds) {
+    if (seconds <= 0) return '--:--';
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    final secs = seconds % 60;
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
 
   @override
   void initState() {
@@ -59,10 +77,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           bytes, SettableMetadata(contentType: 'image/jpeg'));
       final url = await storageRef.getDownloadURL();
       await user.updatePhotoURL(url);
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .set({'photoURL': url}, SetOptions(merge: true));
+      final api = ref.read(apiServiceProvider);
+      await api.patchUserProfile(user.uid, {'photoUrl': url});
+      ref.invalidate(userProfileDocProvider);
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Foto actualizada')));
@@ -83,6 +100,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final user = ref.watch(currentFirebaseUserProvider);
     final profileDocAsync = ref.watch(userProfileDocProvider);
     final territoryDocAsync = ref.watch(userTerritoryDocProvider);
+    final runsAsync = ref.watch(userRunsProvider);
+    final mapType = ref.watch(mapTypeProvider);
+    final mapStyle = ref.watch(mapStyleProvider);
+
+    final profileData = profileDocAsync.value;
+    final displayName =
+        (profileData?['displayName'] as String?) ?? user?.displayName ?? 'Usuario';
+    final email = (profileData?['email'] as String?) ?? user?.email;
+    final photoUrl = (profileData?['photoUrl'] as String?) ??
+        (profileData?['photoURL'] as String?) ??
+        user?.photoURL;
 
     final colorA = theme.colorScheme.primary;
     final colorB = theme.colorScheme.secondary;
@@ -112,14 +140,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
                     CircleAvatar(
                         radius: 14,
-                        backgroundImage: user?.photoURL != null
-                            ? NetworkImage(user!.photoURL!)
+                        backgroundImage: photoUrl != null
+                            ? NetworkImage(photoUrl)
                             : null,
-                        child: user?.photoURL == null
+                        child: photoUrl == null
                             ? const Icon(Icons.person, size: 14)
                             : null),
                     const SizedBox(width: 8),
-                    Text(user?.displayName ?? 'Usuario',
+                    Text(displayName,
                         style: theme.textTheme.titleSmall),
                   ]),
                 ),
@@ -128,8 +156,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(colors: [
-                        colorA.withOpacity(0.18),
-                        colorB.withOpacity(0.12)
+                        colorA.withValues(alpha: 0.18),
+                        colorB.withValues(alpha: 0.12)
                       ], begin: Alignment.topLeft, end: Alignment.bottomRight),
                     ),
                   ),
@@ -154,7 +182,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                   decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(120),
                                       gradient: RadialGradient(colors: [
-                                        colorB.withOpacity(0.06),
+                                        colorB.withValues(alpha: 0.06),
                                         Colors.transparent
                                       ]))))),
                     ),
@@ -169,7 +197,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                             horizontal: 20, vertical: 18),
                         child: Row(children: [
                           _ProfileAvatar(
-                            user: user,
+                            photoUrl: photoUrl,
+                            displayName: displayName,
                             uploading: _uploading,
                             onTap: _pickAndUploadAvatar,
                             pulse: _avatarPulseController,
@@ -182,12 +211,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(user?.displayName ?? 'Usuario',
+                                  Text(displayName,
                                       style: theme.textTheme.headlineSmall
                                           ?.copyWith(
                                               fontWeight: FontWeight.w800)),
-                                  if (user?.email != null)
-                                    Text(user!.email!,
+                                  if (email != null)
+                                    Text(email,
                                         style: theme.textTheme.labelLarge
                                             ?.copyWith(
                                                 color: onSurfaceVariant)),
@@ -196,11 +225,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                     data: (data) {
                                       final iso =
                                           data?['lastActivityAt'] as String?;
-                                      if (iso == null)
+                                      if (iso == null) {
                                         return const SizedBox.shrink();
+                                      }
                                       final dt = DateTime.tryParse(iso);
-                                      if (dt == null)
+                                      if (dt == null) {
                                         return const SizedBox.shrink();
+                                      }
                                       String fmt(DateTime d) =>
                                           '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
                                       return Text(
@@ -282,24 +313,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                               ?.copyWith(
                                                   color: onSurfaceVariant)),
                                       const SizedBox(height: 12),
-                                      Row(children: [
-                                        Expanded(
-                                          child: ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            child: LinearProgressIndicator(
-                                                value: percent,
-                                                minHeight: 10,
-                                                backgroundColor: theme
-                                                    .colorScheme.surfaceVariant
-                                                    .withOpacity(0.6)),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                            '${(percent * 100).toStringAsFixed(0)}%',
-                                            style: theme.textTheme.bodySmall),
-                                      ])
+                                      Text(
+                                        'Tiempo total: ${_formatDuration((p?['totalTime'] as num?)?.toInt() ?? 0)}',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(color: onSurfaceVariant),
+                                      ),
                                     ]),
                               )
                             ]);
@@ -334,14 +352,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                     0.0);
                                 final totalSec =
                                     (p?['totalTime'] as num?)?.toInt() ?? 0;
-                                String fmt(int s) {
-                                  final h =
-                                      (s ~/ 3600).toString().padLeft(2, '0');
-                                  final m = ((s % 3600) ~/ 60)
-                                      .toString()
-                                      .padLeft(2, '0');
-                                  return '$h:$m';
-                                }
 
                                 final t = territoryDocAsync.value;
                                 final areaHa =
@@ -350,42 +360,46 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                             10000.0)
                                         .toStringAsFixed(2);
 
-                                return GridView.count(
+                                final cards = [
+                                  StatCard(
+                                    icon: Icons.directions_run,
+                                    label: 'Carreras',
+                                    value: '$runs',
+                                  ),
+                                  StatCard(
+                                    icon: Icons.route,
+                                    label: 'Distancia',
+                                    value: '${distKm.toStringAsFixed(1)} km',
+                                  ),
+                                  StatCard(
+                                    icon: Icons.timer,
+                                    label: 'Tiempo',
+                                    value: _formatDuration(totalSec),
+                                  ),
+                                  StatCard(
+                                    icon: Icons.terrain,
+                                    label: 'Territorio',
+                                    value: '$areaHa ha',
+                                  ),
+                                ];
+
+                                final crossAxis =
+                                    MediaQuery.of(context).size.width > 700
+                                        ? 2
+                                        : 1;
+
+                                return GridView.builder(
                                   shrinkWrap: true,
-                                  crossAxisCount:
-                                      MediaQuery.of(context).size.width > 700
-                                          ? 4
-                                          : 2,
-                                  crossAxisSpacing: 12,
-                                  mainAxisSpacing: 12,
                                   physics: const NeverScrollableScrollPhysics(),
-                                  children: [
-                                    _StatCard(
-                                        icon: Icons.directions_run,
-                                        label: 'Carreras',
-                                        value: '$runs',
-                                        smallChart: _MiniSparkline(
-                                            values: [1, 2, 3, 2, 4, 3])),
-                                    _StatCard(
-                                        icon: Icons.route,
-                                        label: 'Distancia',
-                                        value:
-                                            '${distKm.toStringAsFixed(1)} km',
-                                        smallChart: _MiniSparkline(
-                                            values: [0.5, 1.2, 2.0, 1.8, 2.2])),
-                                    _StatCard(
-                                        icon: Icons.timer,
-                                        label: 'Tiempo',
-                                        value: fmt(totalSec),
-                                        smallChart: _MiniSparkline(
-                                            values: [30, 40, 50, 35, 60])),
-                                    _StatCard(
-                                        icon: Icons.terrain,
-                                        label: 'Territorio',
-                                        value: '$areaHa ha',
-                                        smallChart: _MiniSparkline(
-                                            values: [0.2, 0.3, 0.5, 0.4])),
-                                  ],
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: crossAxis,
+                                    childAspectRatio: 2.6,
+                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 12,
+                                  ),
+                                  itemCount: cards.length,
+                                  itemBuilder: (_, index) => cards[index],
                                 );
                               },
                               loading: () => const Padding(
@@ -398,78 +412,107 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
                     const SizedBox(height: 12),
 
-                    // Achievements as fancy medals with entrance animation
+                    _DistanceBarChart(runsAsync: runsAsync),
+
+                    const SizedBox(height: 18),
+
+                    _PaceChips(runsAsync: runsAsync),
+
+                    const SizedBox(height: 18),
+
                     GlassContainer(
                       child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(children: [
-                              Text('Logros',
-                                  style: theme.textTheme.titleLarge
-                                      ?.copyWith(fontWeight: FontWeight.bold)),
-                              const Spacer(),
-                              TextButton(
-                                  onPressed: () {},
-                                  child: const Text('Ver todos')),
-                            ]),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              height: 150,
-                              child: profileDocAsync.when(
-                                data: (p) {
-                                  final totalRuns =
-                                      (p?['totalRuns'] as num?)?.toInt() ?? 0;
-                                  final totalKm = ((p?['totalDistance'] as num?)
-                                          ?.toDouble() ??
-                                      0.0);
-                                  final achievements = [
-                                    _Medal(
-                                        icon: Icons.whatshot,
-                                        label: 'Primera carrera',
-                                        done: totalRuns >= 1,
-                                        color: colorA),
-                                    _Medal(
-                                        icon: Icons.emoji_events,
-                                        label: '10K completado',
-                                        done: totalKm >= 10,
-                                        color: colorB),
-                                    _Medal(
-                                        icon: Icons.fitness_center,
-                                        label: '100km total',
-                                        done: totalKm >= 100,
-                                        color: theme.colorScheme.tertiary),
-                                    _Medal(
-                                        icon: Icons.schedule,
-                                        label: '7 días activo',
-                                        done: (p?['streak7'] ?? false) == true,
-                                        color:
-                                            theme.colorScheme.primaryContainer),
-                                  ];
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Mapa preferido',
+                              style: theme.textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 12),
+                          _MapTypeSelector(
+                            selected: mapType,
+                            onChanged: (type) =>
+                                ref.read(mapTypeProvider.notifier).setMapType(type),
+                          ),
+                          const SizedBox(height: 16),
+                          Text('Estilo del mapa',
+                              style: theme.textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 8),
+                          _MapStyleSelector(
+                            selected: mapStyle,
+                            onChanged: (style) => ref
+                                .read(mapStyleProvider.notifier)
+                                .setStyle(style),
+                          ),
+                        ],
+                      ),
+                    ),
 
-                                  return TweenAnimationBuilder<double>(
-                                    tween: Tween(begin: 0, end: 1),
-                                    duration: const Duration(milliseconds: 600),
-                                    builder: (context, v, child) {
-                                      return Transform.translate(
-                                          offset: Offset(0, (1 - v) * 8),
-                                          child: Opacity(
-                                              opacity: v, child: child));
+                    const SizedBox(height: 18),
+
+                    GlassContainer(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Recientes',
+                                  style: theme.textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w600)),
+                              TextButton(
+                                  onPressed: () => context.go('/history'),
+                                  child: const Text('Ver historial')),
+                            ],
+                          ),
+                          runsAsync.when(
+                            data: (runs) {
+                              if (runs.isEmpty) {
+                                return Text('Sin carreras registradas',
+                                    style: theme.textTheme.bodyMedium
+                                        ?.copyWith(color: onSurfaceVariant));
+                              }
+                              return ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: math.min(runs.length, 5),
+                                separatorBuilder: (_, __) => const Divider(),
+                                itemBuilder: (_, index) {
+                                  final run = runs[index];
+                                  final distance =
+                                      ((run['distanceKm'] as num?)?.toDouble() ??
+                                              0.0)
+                                          .toStringAsFixed(2);
+                                  final date = DateTime.tryParse(
+                                      run['startAt'] as String? ?? '');
+                                  final pace =
+                                      (run['pace'] as String?) ?? '--:--';
+                                  return _ProfileRunTile(
+                                    title: run['title'] as String? ?? 'Carrera',
+                                    subtitle: date != null
+                                        ? _formatDate(date)
+                                        : 'Fecha desconocida',
+                                    distance: distance,
+                                    pace: pace,
+                                    onTap: () {
+                                      final id = run['id'] as String?;
+                                      if (id != null) {
+                                        context.go('/runs/$id');
+                                      }
                                     },
-                                    child: ListView.separated(
-                                      scrollDirection: Axis.horizontal,
-                                      itemBuilder: (_, i) => achievements[i],
-                                      separatorBuilder: (_, __) =>
-                                          const SizedBox(width: 12),
-                                      itemCount: achievements.length,
-                                    ),
                                   );
                                 },
-                                loading: () => const Center(
-                                    child: CircularProgressIndicator()),
-                                error: (_, __) => const SizedBox.shrink(),
-                              ),
-                            ),
-                          ]),
+                              );
+                            },
+                            loading: () => const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: LinearProgressIndicator()),
+                            error: (_, __) => Text('No se pudo cargar',
+                                style: theme.textTheme.bodyMedium
+                                    ?.copyWith(color: onSurfaceVariant)),
+                          ),
+                        ],
+                      ),
                     ),
 
                     const SizedBox(height: 18),
@@ -532,7 +575,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                           }
                         },
                         isOutlined: true,
-                        backgroundColor: Colors.red.withOpacity(0.10),
+                        backgroundColor: Colors.red.withValues(alpha: 0.10),
                         child: const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -591,7 +634,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface.withOpacity(0.6),
+                color: Theme.of(context)
+                    .colorScheme
+                    .surface
+                    .withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(12)),
             child: Row(children: [
               Icon(icon, size: 18),
@@ -606,21 +652,74 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 }
 
+class _MapStyleSelector extends StatelessWidget {
+  final MapVisualStyle selected;
+  final ValueChanged<MapVisualStyle> onChanged;
+
+  const _MapStyleSelector({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    final options = [
+      (MapVisualStyle.automatic, 'Automático', Icons.auto_awesome),
+      (MapVisualStyle.light, 'Claro', Icons.wb_sunny_outlined),
+      (MapVisualStyle.dark, 'Oscuro', Icons.nightlight_round),
+      (MapVisualStyle.off, 'Original', Icons.layers_clear),
+    ];
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        for (final option in options)
+          ChoiceChip(
+            selected: selected == option.$1,
+            onSelected: (_) => onChanged(option.$1),
+            label: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(option.$3, size: 18),
+                const SizedBox(width: 8),
+                Text(option.$2),
+              ],
+            ),
+            selectedColor: scheme.primary.withValues(alpha: 0.16),
+            backgroundColor: scheme.surface.withValues(alpha: 0.4),
+            labelStyle: theme.textTheme.bodyMedium,
+            side: BorderSide(
+              color: selected == option.$1
+                  ? scheme.primary
+                  : scheme.outline.withValues(alpha: 0.2),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _ProfileAvatar extends StatelessWidget {
-  final User? user;
+  final String? photoUrl;
+  final String? displayName;
   final bool uploading;
   final VoidCallback onTap;
   final AnimationController pulse;
   final Gradient outerGradient;
-  const _ProfileAvatar(
-      {required this.user,
-      required this.uploading,
-      required this.onTap,
-      required this.pulse,
-      required this.outerGradient});
+
+  const _ProfileAvatar({
+    required this.photoUrl,
+    required this.displayName,
+    required this.uploading,
+    required this.onTap,
+    required this.pulse,
+    required this.outerGradient,
+  });
 
   @override
   Widget build(BuildContext context) {
+    const double size = 112;
     return AnimatedBuilder(
       animation: pulse,
       builder: (context, child) {
@@ -635,7 +734,7 @@ class _ProfileAvatar extends StatelessWidget {
                   gradient: outerGradient,
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withOpacity(0.18),
+                        color: Colors.black.withValues(alpha: 0.18),
                         blurRadius: 24,
                         offset: const Offset(0, 8))
                   ]),
@@ -643,10 +742,10 @@ class _ProfileAvatar extends StatelessWidget {
                 child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
                     child: Container(
-                        width: 106,
-                        height: 106,
-                        color: Colors.white.withOpacity(0.06),
-                        child: _avatarImage())),
+                        width: size,
+                        height: size,
+                        color: Colors.white.withValues(alpha: 0.06),
+                        child: _avatarImage(size))),
               ),
             ),
             Positioned(
@@ -664,7 +763,7 @@ class _ProfileAvatar extends StatelessWidget {
                             color: Theme.of(context)
                                 .colorScheme
                                 .primary
-                                .withOpacity(0.28),
+                                .withValues(alpha: 0.28),
                             blurRadius: 8)
                       ]),
                   padding: const EdgeInsets.all(8),
@@ -686,16 +785,35 @@ class _ProfileAvatar extends StatelessWidget {
     );
   }
 
-  Widget _avatarImage() {
-    if (user?.photoURL != null)
-      return Image.network(user!.photoURL!,
-          width: 106, height: 106, fit: BoxFit.cover);
+  Widget _avatarImage(double size) {
+    if (photoUrl != null && photoUrl!.isNotEmpty) {
+      return Image.network(photoUrl!,
+          width: size, height: size, fit: BoxFit.cover);
+    }
+    final name = displayName?.trim();
+    if (name != null && name.isNotEmpty) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: Center(
+          child: Text(
+            name[0].toUpperCase(),
+            style: TextStyle(
+              fontSize: size * 0.4,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
+    }
     return SizedBox(
-        width: 106,
-        height: 106,
+        width: size,
+        height: size,
         child: Center(
             child: Icon(Icons.person,
-                size: 52, color: Colors.white.withOpacity(0.95))));
+                size: size * 0.48,
+                color: Colors.white.withValues(alpha: 0.95))));
   }
 }
 
@@ -747,7 +865,7 @@ class _RadialPainter extends CustomPainter {
     final center = size.center(Offset.zero);
     final radius = size.width / 2;
     final bgPaint = Paint()
-      ..color = Colors.white.withOpacity(0.06)
+      ..color = Colors.white.withValues(alpha: 0.06)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 8;
     canvas.drawCircle(center, radius - 4, bgPaint);
@@ -821,7 +939,7 @@ class _MedalState extends State<_Medal> with SingleTickerProviderStateMixin {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            color: theme.colorScheme.surface.withOpacity(0.06)),
+            color: theme.colorScheme.surface.withValues(alpha: 0.06)),
         child: Column(children: [
           Stack(alignment: Alignment.topCenter, children: [
             // ribbon
@@ -833,13 +951,14 @@ class _MedalState extends State<_Medal> with SingleTickerProviderStateMixin {
                     decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(6),
                         gradient: LinearGradient(colors: [
-                          widget.color.withOpacity(0.9),
-                          widget.color.withOpacity(0.6)
+                          widget.color.withValues(alpha: 0.9),
+                          widget.color.withValues(alpha: 0.6)
                         ])))),
             CircleAvatar(
                 radius: 30,
-                backgroundColor:
-                    widget.done ? widget.color : widget.color.withOpacity(0.14),
+                backgroundColor: widget.done
+                    ? widget.color
+                    : widget.color.withValues(alpha: 0.14),
                 child: Icon(widget.icon,
                     color: widget.done ? Colors.white : widget.color,
                     size: 28)),
@@ -859,101 +978,400 @@ class _MedalState extends State<_Medal> with SingleTickerProviderStateMixin {
   }
 }
 
-class _StatCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Widget smallChart;
-  const _StatCard(
-      {required this.icon,
-      required this.label,
-      required this.value,
-      required this.smallChart});
+class _DistanceBarChart extends StatelessWidget {
+  final AsyncValue<List<Map<String, dynamic>>> runsAsync;
+
+  const _DistanceBarChart({required this.runsAsync});
+
+  static String _monthLabel(DateTime date) {
+    const months = [
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic',
+    ];
+    return months[date.month - 1];
+  }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return GlassContainer(
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            CircleAvatar(
-                radius: 16,
-                backgroundColor:
-                    Theme.of(context).colorScheme.primary.withOpacity(0.12),
-                child: Icon(icon,
-                    size: 16, color: Theme.of(context).colorScheme.primary)),
-            const SizedBox(width: 8),
-            Text(label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant))
-          ]),
-          const SizedBox(height: 12),
-          Text(value,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w800)),
-          const Spacer(),
-          SizedBox(height: 36, child: smallChart)
-        ]),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Distancia mensual',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            runsAsync.when(
+              data: (runs) {
+                final now = DateTime.now();
+                final monthStarts = List.generate(
+                    6, (index) => DateTime(now.year, now.month - (5 - index), 1));
+                final totals = {
+                  for (final date in monthStarts) date: 0.0,
+                };
+
+                for (final run in runs) {
+                  final iso = run['startAt'] as String?;
+                  final distance =
+                      ((run['distanceKm'] as num?)?.toDouble() ?? 0.0);
+                  if (iso == null || distance <= 0) continue;
+                  final dt = DateTime.tryParse(iso);
+                  if (dt == null) continue;
+                  final key = DateTime(dt.year, dt.month, 1);
+                  if (totals.containsKey(key)) {
+                    totals[key] = totals[key]! + distance;
+                  }
+                }
+
+                final entries = monthStarts
+                    .map((date) => _DistanceEntry(
+                          label: _monthLabel(date),
+                          distance: (totals[date] ?? 0.0),
+                        ))
+                    .toList();
+
+                final maxDistance = entries.fold<double>(
+                    0, (prev, entry) => math.max(prev, entry.distance));
+
+                if (maxDistance <= 0.01) {
+                  return Text('Sin registros recientes',
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: scheme.onSurfaceVariant));
+                }
+
+                return SizedBox(
+                  height: 180,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      for (final entry in entries)
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Text('${entry.distance.toStringAsFixed(1)} km',
+                                  style: theme.textTheme.labelSmall),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: AnimatedContainer(
+                                    duration:
+                                        const Duration(milliseconds: 450),
+                                    curve: Curves.easeOut,
+                                    width: 24,
+                                    height: math.max(
+                                      12,
+                                      120 *
+                                          (entry.distance / maxDistance)
+                                              .clamp(0, 1),
+                                    ),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          scheme.primary.withValues(alpha: 0.85),
+                                          scheme.secondary.withValues(alpha: 0.65),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(entry.label,
+                                  style: theme.textTheme.bodySmall
+                                      ?.copyWith(
+                                          color: scheme.onSurfaceVariant)),
+                            ],
+                          ),
+                        )
+                    ],
+                  ),
+                );
+              },
+              loading: () => const SizedBox(
+                  height: 120,
+                  child: Center(child: CircularProgressIndicator())),
+              error: (_, __) => Text('No se pudo cargar',
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: scheme.onSurfaceVariant)),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _MiniSparkline extends StatelessWidget {
-  final List<double> values;
-  const _MiniSparkline({required this.values});
+class _DistanceEntry {
+  final String label;
+  final double distance;
+
+  const _DistanceEntry({required this.label, required this.distance});
+}
+
+class _PaceChips extends StatelessWidget {
+  final AsyncValue<List<Map<String, dynamic>>> runsAsync;
+
+  const _PaceChips({required this.runsAsync});
+
+  static int? _parsePace(String? pace) {
+    if (pace == null || pace.isEmpty) return null;
+    final cleaned = pace.replaceAll(RegExp(r'[^0-9:]'), '');
+    final parts = cleaned.split(':').where((p) => p.isNotEmpty).toList();
+    if (parts.length == 2) {
+      final minutes = int.tryParse(parts[0]);
+      final seconds = int.tryParse(parts[1]);
+      if (minutes == null || seconds == null) return null;
+      return minutes * 60 + seconds;
+    }
+    if (parts.length == 3) {
+      final hours = int.tryParse(parts[0]);
+      final minutes = int.tryParse(parts[1]);
+      final seconds = int.tryParse(parts[2]);
+      if (hours == null || minutes == null || seconds == null) return null;
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+    return null;
+  }
+
+  static String _formatPace(int seconds) {
+    if (seconds <= 0) return '--:--';
+    final minutes = seconds ~/ 60;
+    final secs = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')} min/km';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-        painter: _SparkPainter(
-            values: values, color: Theme.of(context).colorScheme.primary),
-        size: const Size(double.infinity, 36));
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return GlassContainer(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Ritmo',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            runsAsync.when(
+              data: (runs) {
+                final paces = <int>[];
+                for (final run in runs) {
+                  final paceStr = run['pace'] as String?;
+                  final seconds = _parsePace(paceStr);
+                  if (seconds != null && seconds > 0) {
+                    paces.add(seconds);
+                  }
+                }
+
+                if (paces.isEmpty) {
+                  return Text('Sin datos de ritmo',
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: scheme.onSurfaceVariant));
+                }
+
+                paces.sort();
+                final best = paces.first;
+                final average =
+                    paces.reduce((value, element) => value + element) /
+                        paces.length;
+
+                final totalDistance = runs.fold<double>(
+                    0.0,
+                    (total, run) =>
+                        total + ((run['distanceKm'] as num?)?.toDouble() ?? 0.0));
+
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    _PaceInfoChip(
+                      icon: Icons.flash_on,
+                      label: 'Mejor ritmo',
+                      value: _formatPace(best),
+                    ),
+                    _PaceInfoChip(
+                      icon: Icons.equalizer,
+                      label: 'Ritmo promedio',
+                      value: _formatPace(average.round()),
+                    ),
+                    _PaceInfoChip(
+                      icon: Icons.timeline,
+                      label: 'Kilómetros registrados',
+                      value: '${totalDistance.toStringAsFixed(1)} km',
+                    ),
+                  ],
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (_, __) => Text('No se pudo cargar',
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: scheme.onSurfaceVariant)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
-class _SparkPainter extends CustomPainter {
-  final List<double> values;
-  final Color color;
-  _SparkPainter({required this.values, required this.color});
+class _PaceInfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _PaceInfoChip({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   @override
-  void paint(Canvas canvas, Size size) {
-    if (values.isEmpty) return;
-    final paint = Paint()
-      ..color = color.withOpacity(0.95)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-    final path = Path();
-    final min = values.reduce((a, b) => a < b ? a : b);
-    final max = values.reduce((a, b) => a > b ? a : b);
-    for (var i = 0; i < values.length; i++) {
-      final x = (i / (values.length - 1)) * size.width;
-      final y = size.height -
-          ((values[i] - min) / ((max - min).abs() < 0.0001 ? 1 : (max - min))) *
-              size.height;
-      if (i == 0)
-        path.moveTo(x, y);
-      else
-        path.lineTo(x, y);
-    }
-    canvas.drawPath(path, paint);
-
-    // small dot at end
-    final endX = size.width;
-    final endY = size.height -
-        ((values.last - min) / ((max - min).abs() < 0.0001 ? 1 : (max - min))) *
-            size.height;
-    final dot = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(endX, endY), 2.8, dot);
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outline.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: scheme.primary),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant
+                          .withValues(alpha: 0.8))),
+              Text(value,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w600)),
+            ],
+          )
+        ],
+      ),
+    );
   }
+}
+
+class _MapTypeSelector extends StatelessWidget {
+  final MapType selected;
+  final ValueChanged<MapType> onChanged;
+
+  const _MapTypeSelector({required this.selected, required this.onChanged});
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    final options = [
+      (MapType.normal, 'Estándar', Icons.map),
+      (MapType.satellite, 'Satélite', Icons.satellite_alt_outlined),
+      (MapType.terrain, 'Terreno', Icons.terrain),
+      (MapType.hybrid, 'Híbrido', Icons.layers_outlined),
+    ];
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        for (final option in options)
+          ChoiceChip(
+            selected: selected == option.$1,
+            onSelected: (_) => onChanged(option.$1),
+            label: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(option.$3, size: 18),
+                const SizedBox(width: 8),
+                Text(option.$2),
+              ],
+            ),
+            selectedColor: scheme.primary.withValues(alpha: 0.16),
+            backgroundColor: scheme.surface.withValues(alpha: 0.4),
+            labelStyle: theme.textTheme.bodyMedium,
+            side: BorderSide(
+              color: selected == option.$1
+                  ? scheme.primary
+                  : scheme.outline.withValues(alpha: 0.2),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ProfileRunTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String distance;
+  final String pace;
+  final VoidCallback? onTap;
+
+  const _ProfileRunTile({
+    required this.title,
+    required this.subtitle,
+    required this.distance,
+    required this.pace,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      onTap: onTap,
+      title: Text(title,
+          style:
+              theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle,
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: scheme.onSurfaceVariant)),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text('$distance km',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              )),
+          Text(pace,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
 }

@@ -214,7 +214,11 @@ class SettingsScreen extends ConsumerWidget {
 
   void _showThemeDialog(BuildContext context, WidgetRef ref) {
     final currentTheme = ref.read(themeProvider);
-    
+    void selectTheme(AppThemeMode mode) {
+      ref.read(themeProvider.notifier).setTheme(mode);
+      Navigator.pop(context);
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -222,52 +226,28 @@ class SettingsScreen extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              title: const Text('Sistema'),
-              leading: Radio<String>(
-                value: 'system',
-                groupValue: currentTheme == AppThemeMode.system ? 'system' : 
-                           currentTheme == AppThemeMode.light ? 'light' : 'dark',
-                onChanged: (value) {
-                  // TODO: Update theme
-                  Navigator.pop(context);
-                },
-              ),
-              onTap: () {
-                // TODO: Update theme to system
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Claro'),
-              leading: Radio<String>(
-                value: 'light',
-                groupValue: currentTheme == AppThemeMode.system ? 'system' : 
-                           currentTheme == AppThemeMode.light ? 'light' : 'dark',
-                onChanged: (value) {
-                  // TODO: Update theme
-                  Navigator.pop(context);
-                },
-              ),
-              onTap: () {
-                // TODO: Update theme to light
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Oscuro'),
-              leading: Radio<String>(
-                value: 'dark',
-                groupValue: currentTheme == AppThemeMode.system ? 'system' : 
-                           currentTheme == AppThemeMode.light ? 'light' : 'dark',
-                onChanged: (value) {
-                  // TODO: Update theme
-                  Navigator.pop(context);
-                },
-              ),
-              onTap: () {
-                // TODO: Update theme to dark
-                Navigator.pop(context);
+            SegmentedButton<AppThemeMode>(
+              segments: const [
+                ButtonSegment(
+                  value: AppThemeMode.system,
+                  label: Text('Sistema'),
+                  icon: Icon(Icons.settings_suggest_outlined),
+                ),
+                ButtonSegment(
+                  value: AppThemeMode.light,
+                  label: Text('Claro'),
+                  icon: Icon(Icons.wb_sunny_outlined),
+                ),
+                ButtonSegment(
+                  value: AppThemeMode.dark,
+                  label: Text('Oscuro'),
+                  icon: Icon(Icons.nightlight_round),
+                ),
+              ],
+              selected: {currentTheme},
+              onSelectionChanged: (selection) {
+                if (selection.isEmpty) return;
+                selectTheme(selection.first);
               },
             ),
           ],
@@ -300,7 +280,7 @@ class _SettingsTile extends StatelessWidget {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.primaryContainer.withOpacity(0.5),
+          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(

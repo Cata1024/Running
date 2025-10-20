@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -23,13 +22,33 @@ class AppTheme {
   static const Color errorColor = Color(0xFFFF5252);
   static const Color infoColor = Color(0xFF2196F3);
 
-  // Espaciado consistente
+  // === SPACING TOKENS ===
+  // Espaciado base (múltiplos de 4)
+  static const double space4 = 4.0;
+  static const double space8 = 8.0;
+  static const double space12 = 12.0;
+  static const double space16 = 16.0;
+  static const double space20 = 20.0;
+  static const double space24 = 24.0;
+  static const double space32 = 32.0;
+  static const double space48 = 48.0;
+  static const double space64 = 64.0;
+  
+  // Padding presets
   static const EdgeInsets paddingSmall = EdgeInsets.all(8.0);
   static const EdgeInsets paddingMedium = EdgeInsets.all(16.0);
   static const EdgeInsets paddingLarge = EdgeInsets.all(24.0);
   static const EdgeInsets paddingXLarge = EdgeInsets.all(32.0);
 
-  // Border radius consistentes
+  // === RADIUS TOKENS ===
+  static const double radiusSm = 8.0;
+  static const double radiusMd = 12.0;
+  static const double radiusLg = 16.0;
+  static const double radiusXl = 20.0;
+  static const double radius2xl = 24.0;
+  static const double radiusFull = 999.0;
+  
+  // Legacy (mantener compatibilidad)
   static const double radiusSmall = 8.0;
   static const double radiusMedium = 16.0;
   static const double radiusLarge = 24.0;
@@ -81,11 +100,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      colorScheme: scheme.copyWith(
-        primary: primaryGradientStart,
-        secondary: accentGradientStart,
-        tertiary: const Color(0xFF6750A4),
-      ),
+      colorScheme: scheme,
       textTheme: textTheme,
       
       // Configuración de AppBar con glassmorphism
@@ -250,11 +265,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      colorScheme: scheme.copyWith(
-        primary: primaryGradientStart,
-        secondary: accentGradientStart,
-        tertiary: const Color(0xFFBB86FC),
-      ),
+      colorScheme: scheme,
       textTheme: textTheme,
       
       appBarTheme: AppBarTheme(

@@ -33,6 +33,9 @@ class EnvConfig {
   /// Google Maps
   String get googleMapsApiKey => _get('GOOGLE_MAPS_API_KEY');
 
+  /// Backend REST API
+  String get backendApiUrl => _get('BASE_API_URL');
+
   /// Returns Firebase options based on the current platform.
   FirebaseOptions firebaseOptions() {
     if (kIsWeb) {

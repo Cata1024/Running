@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 /// Entidad de perfil de usuario optimizada
 class UserProfile {
   final String id;
@@ -42,8 +40,8 @@ class UserProfile {
     this.goalDescription,
   });
 
-  /// Constructor desde Firestore
-  factory UserProfile.fromFirestore(Map<String, dynamic> data, String id) {
+  /// Constructor desde JSON (REST API)
+  factory UserProfile.fromJson(Map<String, dynamic> data, String id) {
     return UserProfile(
       id: id,
       email: data['email'] ?? '',
@@ -66,12 +64,12 @@ class UserProfile {
     );
   }
 
-  /// Convertir a mapa para Firestore
-  Map<String, dynamic> toFirestore() {
+  /// Convertir a JSON
+  Map<String, dynamic> toJson() {
     return {
       'email': email,
       'displayName': displayName,
-      'createdAt': Timestamp.fromDate(createdAt),
+      'createdAt': createdAt.toIso8601String(),
       'totalRuns': totalRuns,
       'totalDistance': totalDistance,
       'totalTime': totalTime,
@@ -80,9 +78,9 @@ class UserProfile {
       'achievements': achievements,
       if (photoUrl != null) 'photoUrl': photoUrl,
       if (lastActivityAt != null) 
-        'lastActivityAt': Timestamp.fromDate(lastActivityAt!),
+        'lastActivityAt': lastActivityAt!.toIso8601String(),
       if (birthDate != null) 
-        'birthDate': Timestamp.fromDate(birthDate!),
+        'birthDate': birthDate!.toIso8601String(),
       if (weightKg != null) 'weightKg': weightKg,
       if (heightCm != null) 'heightCm': heightCm,
       if (gender != null) 'gender': gender,
@@ -194,7 +192,6 @@ class UserProfile {
   static DateTime? _parseDate(dynamic value) {
     if (value == null) return null;
     if (value is DateTime) return value;
-    if (value is Timestamp) return value.toDate();
     if (value is String) return DateTime.tryParse(value);
     if (value is num) {
       return DateTime.fromMillisecondsSinceEpoch(value.toInt());

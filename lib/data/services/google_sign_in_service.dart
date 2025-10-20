@@ -1,7 +1,7 @@
+//google_sign_in_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// Servicio simplificado para Google Sign In
-/// TODO: Implementar cuando se resuelvan los problemas de configuración
 class GoogleSignInService {
   /// Iniciar sesión con Google - manejado directamente por FirebaseAuthService
   static Future<void> signIn() async {

@@ -17,7 +17,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateStreamProvider);
   
   return GoRouter(
-    initialLocation: '/auth/login',
+    initialLocation: '/',
     debugLogDiagnostics: false,
     redirect: (context, state) {
       final isLoggedIn = authState.when(
@@ -27,6 +27,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       );
       
       final isLoggingIn = state.matchedLocation.startsWith('/auth');
+      final isRoot = state.matchedLocation == '/';
+
+      // Si está en la raíz, redirigir según estado de auth
+      if (isRoot) {
+        return isLoggedIn ? '/map' : '/auth/login';
+      }
 
       // Si no está logueado y no está en auth, redirigir a login
       if (!isLoggedIn && !isLoggingIn) {
@@ -41,6 +47,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      // Ruta raíz - redirige automáticamente
+      GoRoute(
+        path: '/',
+        redirect: (context, state) => '/auth/login',
+      ),
+      
       GoRoute(
         path: '/splash',
         name: 'splash',
@@ -141,8 +153,11 @@ class AppShell extends ConsumerWidget {
     final currentPath = GoRouterState.of(context).matchedLocation;
     int currentIndex = 0;
     
-    if (currentPath.startsWith('/history')) currentIndex = 1;
-    else if (currentPath.startsWith('/profile')) currentIndex = 2;
+    if (currentPath.startsWith('/history')) {
+      currentIndex = 1;
+    } else if (currentPath.startsWith('/profile')) {
+      currentIndex = 2;
+    }
     
     return Scaffold(
       body: child,

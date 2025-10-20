@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../core/widgets/glass_container.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../providers/app_providers.dart';
 import 'package:go_router/go_router.dart';
-// run_detail_screen.dart is routed via GoRouter; no direct import needed here
+
+import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/glass_container.dart';
+import '../../../core/widgets/mini_map.dart';
+import '../../providers/app_providers.dart';
 
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
@@ -22,6 +23,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     if (start == null && end != null) return _formatDate(end);
     return '${_formatDate(start!)} - ${_formatDate(end!)}';
   }
+
+  String _formatDuration(int seconds) {
+    final hours = (seconds ~/ 3600).toString().padLeft(2, '0');
+    final minutes = ((seconds % 3600) ~/ 60).toString().padLeft(2, '0');
+    final secs = (seconds % 60).toString().padLeft(2, '0');
+    return '$hours:$minutes:$secs';
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -29,6 +37,36 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     final filter = ref.watch(historyFilterProvider);
     final filterNotifier = ref.read(historyFilterProvider.notifier);
     
+    final runsAsync = ref.watch(userRunsProvider);
+
+    final summary = runsAsync.when<Map<String, dynamic>>(
+      loading: () => const {
+        'totalRuns': null,
+        'totalDistanceKm': null,
+        'totalTime': null,
+      },
+      error: (_, __) => const {
+        'totalRuns': null,
+        'totalDistanceKm': null,
+        'totalTime': null,
+      },
+      data: (runs) {
+        int totalRuns = runs.length;
+        double totalDistanceKm = 0;
+        int totalTime = 0;
+        for (final run in runs) {
+          totalDistanceKm +=
+              ((run['distanceM'] as num?)?.toDouble() ?? 0.0) / 1000.0;
+          totalTime += (run['durationS'] as num?)?.toInt() ?? 0;
+        }
+        return {
+          'totalRuns': totalRuns,
+          'totalDistanceKm': totalDistanceKm,
+          'totalTime': totalTime,
+        };
+      },
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Historial'),
@@ -45,17 +83,23 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 children: [
                   _StatItem(
                     label: 'Total Carreras',
-                    value: '12',
+                    value: summary['totalRuns'] == null
+                        ? '--'
+                        : summary['totalRuns'].toString(),
                     icon: Icons.directions_run,
                   ),
                   _StatItem(
                     label: 'Distancia Total',
-                    value: '85.4 km',
+                    value: summary['totalDistanceKm'] == null
+                        ? '--'
+                        : '${(summary['totalDistanceKm'] as double).toStringAsFixed(1)} km',
                     icon: Icons.route,
                   ),
                   _StatItem(
                     label: 'Tiempo Total',
-                    value: '8:42:15',
+                    value: summary['totalTime'] == null
+                        ? '--:--'
+                        : _formatDuration(summary['totalTime'] as int),
                     icon: Icons.timer,
                   ),
                 ],
@@ -138,91 +182,84 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             
             // Run List (Firestore con filtros)
             Expanded(
-              child: Builder(
-                builder: (context) {
-                  final user = ref.watch(currentFirebaseUserProvider);
-                  if (user == null) {
-                    return const Center(child: Text('Inicia sesión'));
+              child: runsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, stack) => Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No se pudieron cargar las carreras',
+                          style: const TextStyle(fontSize: 14),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: () => ref.invalidate(userRunsProvider),
+                          child: const Text('Reintentar'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                data: (runs) {
+                  final filtered = runs.where((run) {
+                    final distanceKm =
+                        ((run['distanceM'] as num?)?.toDouble() ?? 0.0) / 1000.0;
+                    if (distanceKm < filter.minKm || distanceKm > filter.maxKm) {
+                      return false;
+                    }
+
+                    if (filter.onlyClosed && run['isClosedCircuit'] != true) {
+                      return false;
+                    }
+
+                    final startedAtStr = run['startedAt'] as String?;
+                    final startedAt =
+                        startedAtStr != null ? DateTime.tryParse(startedAtStr) : null;
+                    if (filter.start != null && startedAt != null) {
+                      if (startedAt.isBefore(filter.start!)) return false;
+                    }
+                    if (filter.end != null && startedAt != null) {
+                      if (startedAt.isAfter(filter.end!)) return false;
+                    }
+
+                    return true;
+                  }).toList();
+
+                  filtered.sort((a, b) {
+                    final aDate =
+                        DateTime.tryParse(a['startedAt'] ?? '') ?? DateTime(1970);
+                    final bDate =
+                        DateTime.tryParse(b['startedAt'] ?? '') ?? DateTime(1970);
+                    return bDate.compareTo(aDate);
+                  });
+
+                  if (filtered.isEmpty) {
+                    return EmptyState(
+                      icon: Icons.directions_run,
+                      title: 'Sin carreras aún',
+                      message: 'Inicia tu primera carrera para ver tu historial aquí',
+                      actionLabel: 'Ir a Mapa',
+                      onAction: () {
+                        DefaultTabController.of(context).animateTo(1);
+                      },
+                    );
                   }
-                  // Consulta completa con filtros (requiere índice compuesto)
-                  Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-                      .collection('runs')
-                      .where('userId', isEqualTo: user.uid)
-                      .orderBy('startedAt', descending: true);
-                  
-                  // Aplicar filtros opcionales
-                  if (filter.onlyClosed) {
-                    q = q.where('isClosedCircuit', isEqualTo: true);
-                  }
-                  if (filter.start != null) {
-                    q = q.where('startedAt', isGreaterThanOrEqualTo: filter.start!.toIso8601String());
-                  }
-                  if (filter.end != null) {
-                    q = q.where('startedAt', isLessThanOrEqualTo: filter.end!.toIso8601String());
-                  }
-                  
-                  q = q.limit(50);
-                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: q.snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        // Mostrar error completo con URL de índice
-                        final errorStr = snapshot.error.toString();
-                        return Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                                const SizedBox(height: 16),
-                                const Text('Error de Firestore', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 12),
-                                SelectableText(
-                                  errorStr,
-                                  style: const TextStyle(fontSize: 12),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 16),
-                                ElevatedButton.icon(
-                                  onPressed: () {
-                                    // Copiar al portapapeles
-                                    debugPrint('=== ERROR COMPLETO ===');
-                                    debugPrint(errorStr);
-                                    debugPrint('=====================');
-                                  },
-                                  icon: const Icon(Icons.bug_report),
-                                  label: const Text('Ver en Consola'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-                      final docs = snapshot.data?.docs ?? [];
-                      if (docs.isEmpty) {
-                        return const Center(child: Text('Sin carreras aún'));
-                      }
-                      var runs = docs.map((d) => {'id': d.id, ...d.data()}).toList();
-                      
-                      // Filtro de distancia en cliente (solo este, el resto en Firestore)
-                      runs = runs.where((r) {
-                        final km = ((r['distanceM'] as num?)?.toDouble() ?? 0.0) / 1000.0;
-                        return km >= filter.minKm && km <= filter.maxKm;
-                      }).toList();
-                      return ListView.separated(
-                        itemCount: runs.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final run = runs[index];
-                          return _RunCardFirestore(
-                            run: run,
-                            onTap: () => context.push('/history/detail', extra: run['id']),
-                          );
-                        },
+
+                  return ListView.separated(
+                    itemCount: filtered.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final run = filtered[index];
+                      return _RunCard(
+                        run: run,
+                        onTap: () => GoRouter.of(context)
+                            .pushNamed('run-detail', extra: run['id']),
                       );
                     },
                   );
@@ -271,10 +308,10 @@ class _StatItem extends StatelessWidget {
   }
 }
 
-class _RunCardFirestore extends StatelessWidget {
+class _RunCard extends StatelessWidget {
   final Map<String, dynamic> run;
   final VoidCallback onTap;
-  const _RunCardFirestore({required this.run, required this.onTap});
+  const _RunCard({required this.run, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -305,83 +342,103 @@ class _RunCardFirestore extends StatelessWidget {
       return '$m:$s';
     }
 
+    final isClosedCircuit = run['isClosedCircuit'] == true;
+    final routeGeoJson = run['routeGeoJson'] as Map<String, dynamic>?;
+    final coordinates = routeGeoJson?['coordinates'] as List<dynamic>? ?? [];
+
     return GestureDetector(
       onTap: onTap,
       child: GlassContainer(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            // Date Circle
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                shape: BoxShape.circle,
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    day,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                  Text(
-                    month,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                ],
-              ),
+            // Mini Map
+            MiniMap(
+              routeCoordinates: coordinates,
+              width: 70,
+              height: 70,
+              borderRadius: 10,
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             
             // Run Details
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    startedAt != null ? '${startedAt.year}-${startedAt.month.toString().padLeft(2,'0')}-${startedAt.day.toString().padLeft(2,'0')}' : 'Carrera',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        '$day $month',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (isClosedCircuit)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.successColor.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                size: 12,
+                                color: AppTheme.successColor,
+                              ),
+                              const SizedBox(width: 2),
+                              Text(
+                                'Circuito',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.successColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Icon(
                         Icons.route,
-                        size: 16,
+                        size: 14,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         '${(distanceM / 1000).toStringAsFixed(2)} km',
-                        style: theme.textTheme.bodyMedium,
+                        style: theme.textTheme.bodySmall,
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 12),
                       Icon(
                         Icons.timer,
-                        size: 16,
+                        size: 14,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         fmt(durationS),
-                        style: theme.textTheme.bodyMedium,
+                        style: theme.textTheme.bodySmall,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
-                    'Ritmo: ${pace()} min/km',
+                    '${pace()} min/km',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -389,7 +446,10 @@ class _RunCardFirestore extends StatelessWidget {
             ),
             
             // Action Button
-            const Icon(Icons.chevron_right),
+            Icon(
+              Icons.chevron_right,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ],
         ),
       ),

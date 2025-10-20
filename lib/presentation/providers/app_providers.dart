@@ -1,12 +1,30 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../data/services/api_service.dart';
 import '../../data/services/firebase_auth_service.dart';
+import '../../core/map_icons.dart';
 
 /// Providers básicos que funcionan con Riverpod 3.0+
 
 // Enums
 enum AppThemeMode { system, light, dark }
+
+class ThemeModeNotifier extends Notifier<AppThemeMode> {
+  @override
+  AppThemeMode build() => AppThemeMode.system;
+
+  void setTheme(AppThemeMode mode) => state = mode;
+}
+
+enum MapVisualStyle { automatic, light, dark, off }
+
+class MapStyleNotifier extends Notifier<MapVisualStyle> {
+  @override
+  MapVisualStyle build() => MapVisualStyle.automatic;
+
+  void setStyle(MapVisualStyle style) => state = style;
+}
 
 /// Filtros del historial
 class HistoryFilter {
@@ -95,9 +113,17 @@ class RunState {
   }
 }
 
+/// API Service provider
+final apiServiceProvider = Provider<ApiService>((ref) {
+  final service = ApiService();
+  ref.onDispose(service.dispose);
+  return service;
+});
+
 /// Firebase Auth Service Provider
 final authServiceProvider = Provider<FirebaseAuthService>((ref) {
-  return FirebaseAuthService();
+  final apiService = ref.watch(apiServiceProvider);
+  return FirebaseAuthService(apiService: apiService);
 });
 
 /// Auth State Stream Provider
@@ -119,43 +145,58 @@ final currentFirebaseUserProvider = Provider<User?>((ref) {
 /// Simple state providers usando Provider + ref.read/ref.watch
 final navigationIndexProvider = Provider<int>((ref) => 0);
 final appLoadingProvider = Provider<bool>((ref) => false);
-final themeProvider = Provider<AppThemeMode>((ref) => AppThemeMode.system);
+final themeProvider = NotifierProvider<ThemeModeNotifier, AppThemeMode>(
+  ThemeModeNotifier.new,
+);
+final mapStyleProvider = NotifierProvider<MapStyleNotifier, MapVisualStyle>(
+  MapStyleNotifier.new,
+);
 final runStateProvider = Provider<RunState>((ref) => const RunState());
+
+final mapIconsProvider = FutureProvider<MapIconsBundle>((ref) async {
+  return MapIcons.load();
+});
 
 /// Métodos para cambiar estados (usaremos Consumer widgets en lugar de notifiers)
 /// Estos proveedores servirán para lectura, y manejaremos los cambios directamente en los widgets
 
 /// Perfil de usuario (Firestore: users/{uid})
-final userProfileDocProvider = StreamProvider<Map<String, dynamic>?>((ref) {
+final userProfileDocProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   final user = ref.watch(currentFirebaseUserProvider);
-  if (user == null) return const Stream.empty();
-  final doc = FirebaseFirestore.instance.collection('users').doc(user.uid);
-  return doc.snapshots().map((s) => s.data());
+  if (user == null) return null;
+  final api = ref.watch(apiServiceProvider);
+  return api.fetchUserProfile(user.uid);
 });
 
 /// Territorio del usuario (Firestore: territory/{uid})
-final userTerritoryDocProvider = StreamProvider<Map<String, dynamic>?>((ref) {
+final userTerritoryDocProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   final user = ref.watch(currentFirebaseUserProvider);
-  if (user == null) return const Stream.empty();
-  final doc = FirebaseFirestore.instance.collection('territory').doc(user.uid);
-  return doc.snapshots().map((s) => s.data());
+  if (user == null) return null;
+  final api = ref.watch(apiServiceProvider);
+  return api.fetchTerritory(user.uid);
 });
 
 /// Últimas carreras del usuario (Firestore: runs, filtrado por userId)
-final userRunsProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
+final userRunsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final user = ref.watch(currentFirebaseUserProvider);
-  if (user == null) return const Stream.empty();
-  final query = FirebaseFirestore.instance
-      .collection('runs')
-      .where('userId', isEqualTo: user.uid)
-      .orderBy('startedAt', descending: true)
-      .limit(20);
-  return query.snapshots().map((snap) =>
-      snap.docs.map((d) => {'id': d.id, ...d.data()}).toList());
+  if (user == null) return const [];
+  final api = ref.watch(apiServiceProvider);
+  return api.fetchRuns(limit: 50);
 });
 
 /// Documento de run por id (Firestore: runs/{id})
-final runDocProvider = StreamProvider.family<Map<String, dynamic>?, String>((ref, id) {
-  final doc = FirebaseFirestore.instance.collection('runs').doc(id);
-  return doc.snapshots().map((s) => s.data());
+final runDocProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, id) async {
+  final api = ref.watch(apiServiceProvider);
+  return api.fetchRun(id);
 });
+
+class MapTypeNotifier extends Notifier<MapType> {
+  @override
+  MapType build() => MapType.normal;
+
+  void setMapType(MapType type) => state = type;
+}
+
+final mapTypeProvider = NotifierProvider<MapTypeNotifier, MapType>(
+  MapTypeNotifier.new,
+);

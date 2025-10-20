@@ -1,16 +1,21 @@
+//firebase_auth_service.dart
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/error/app_error.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'api_service.dart';
 
 /// Servicio de autenticación optimizado con Firebase
 class FirebaseAuthService {
   final FirebaseAuth _auth;
+  final ApiService _api;
   
   FirebaseAuthService({
     FirebaseAuth? auth,
-  }) : _auth = auth ?? FirebaseAuth.instance;
+    required ApiService apiService,
+  })  : _auth = auth ?? FirebaseAuth.instance,
+        _api = apiService;
 
   /// Stream del estado de autenticación
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -68,7 +73,9 @@ class FirebaseAuthService {
       
       // Enviar email de verificación
       await credential.user!.sendEmailVerification();
-      
+
+      await _ensureUserDocument(credential.user!);
+
       return credential.user!;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
@@ -368,28 +375,24 @@ class FirebaseAuthService {
   /// Asegura que exista el documento de usuario en Firestore
   Future<void> _ensureUserDocument(User user) async {
     try {
-      final doc = FirebaseFirestore.instance.collection('users').doc(user.uid);
-      final snap = await doc.get();
-      if (!snap.exists) {
-        await doc.set({
-          'email': user.email,
-          'displayName': user.displayName,
-          'photoUrl': user.photoURL,
-          'preferredUnits': 'metric',
-          'level': 1,
-          'experience': 0,
-          'totalRuns': 0,
-          'totalDistance': 0,
-          'totalTime': 0,
-          'createdAt': DateTime.now().toIso8601String(),
-          'lastActivityAt': null,
-          'birthDate': null,
-          'gender': null,
-          'heightCm': null,
-          'weightKg': null,
-          'goalDescription': null,
-        });
-      }
+      await _api.upsertUserProfile(user.uid, {
+        'email': user.email,
+        'displayName': user.displayName,
+        'photoUrl': user.photoURL,
+        'preferredUnits': 'metric',
+        'level': 1,
+        'experience': 0,
+        'totalRuns': 0,
+        'totalDistance': 0,
+        'totalTime': 0,
+        'createdAt': DateTime.now().toIso8601String(),
+        'lastActivityAt': null,
+        'birthDate': null,
+        'gender': null,
+        'heightCm': null,
+        'weightKg': null,
+        'goalDescription': null,
+      });
     } catch (_) {
       // No bloquear el login por fallo no crítico de perfil
     }

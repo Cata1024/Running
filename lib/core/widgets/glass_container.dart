@@ -42,13 +42,13 @@ class GlassContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final defaultBgColor = isDark 
-        ? Colors.white.withOpacity(opacity)
-        : Colors.white.withOpacity(opacity * 0.8);
+        ? Colors.white.withValues(alpha: opacity)
+        : Colors.white.withValues(alpha: opacity * 0.8);
     
     final defaultBorder = Border.all(
       color: isDark
-          ? Colors.white.withOpacity(0.1)
-          : Colors.white.withOpacity(0.2),
+          ? Colors.white.withValues(alpha: 0.1)
+          : Colors.white.withValues(alpha: 0.2),
       width: 1,
     );
 

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../../core/widgets/glass_button.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../providers/app_providers.dart';
 
 class CompleteProfileScreen extends ConsumerStatefulWidget {
   const CompleteProfileScreen({super.key});
@@ -22,6 +23,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
   String? _selectedGender;
   String? _selectedExperience;
   bool _isLoading = false;
+  bool _initializedFromProfile = false;
 
   @override
   void dispose() {
@@ -36,19 +38,177 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
     if (!_formKey.currentState!.validate()) return;
     
     setState(() => _isLoading = true);
-    
-    // Simulate API call
-    await Future.delayed(const Duration(seconds: 2));
-    
-    if (mounted) {
-      context.go('/home');
+    try {
+      final user = ref.read(currentFirebaseUserProvider);
+      if (user == null) {
+        throw Exception('Usuario no autenticado');
+      }
+
+      final name = _nameController.text.trim();
+      final age = int.tryParse(_ageController.text.trim());
+      final weight = double.tryParse(_weightController.text.trim());
+      final height = int.tryParse(_heightController.text.trim());
+
+      DateTime? birthDate;
+      if (age != null) {
+        final now = DateTime.now();
+        final tentative = DateTime(now.year - age, now.month, now.day);
+        birthDate = tentative.isAfter(now)
+            ? DateTime(now.year - age - 1, now.month, now.day)
+            : tentative;
+      }
+
+      final experiencePoints = _experienceToPoints(_selectedExperience);
+
+      final payload = <String, dynamic>{
+        'displayName': name,
+        'gender': _selectedGender,
+        'weightKg': weight,
+        'heightCm': height,
+        'experience': experiencePoints,
+        'experienceLevel': _selectedExperience,
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+      if (birthDate != null) {
+        payload['birthDate'] = birthDate.toIso8601String();
+      }
+      payload.removeWhere((key, value) => value == null);
+
+      await ref.read(apiServiceProvider).patchUserProfile(user.uid, payload);
+      if (name.isNotEmpty) {
+        await ref.read(authServiceProvider).updateProfile(displayName: name);
+      }
+
+      ref.invalidate(userProfileDocProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Perfil actualizado correctamente')),
+        );
+        context.go('/map');
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar el perfil: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  void _loadProfile(Map<String, dynamic> data) {
+    final displayName = data['displayName'] as String?;
+    final gender = data['gender'] as String?;
+    final weight = _toDouble(data['weightKg']);
+    final height = _toInt(data['heightCm']);
+    final birthDate = _parseDate(data['birthDate']);
+    final experience = data['experience'];
+    final experienceLevel = data['experienceLevel'] as String? ?? _experienceFromPoints(experience);
+
+    if (displayName != null && displayName.isNotEmpty) {
+      _nameController.text = displayName;
+    }
+    if (birthDate != null) {
+      final now = DateTime.now();
+      var age = now.year - birthDate.year;
+      final hasHadBirthday =
+          DateTime(now.year, birthDate.month, birthDate.day).isBefore(now) ||
+              DateTime(now.year, birthDate.month, birthDate.day).isAtSameMomentAs(now);
+      if (!hasHadBirthday) {
+        age -= 1;
+      }
+      _ageController.text = age.toString();
+    }
+    if (weight != null) {
+      _weightController.text = _formatNumber(weight);
+    }
+    if (height != null) {
+      _heightController.text = height.toString();
+    }
+    _selectedGender = gender;
+    _selectedExperience = experienceLevel;
+  }
+
+  static double? _toDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  static int? _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    if (value is Map && value['date'] is String) {
+      return DateTime.tryParse(value['date'] as String);
+    }
+    return null;
+  }
+
+  static String _formatNumber(double value) {
+    final isInteger = value % 1 == 0;
+    return isInteger ? value.toInt().toString() : value.toStringAsFixed(1);
+  }
+
+  static String? _experienceFromPoints(dynamic value) {
+    if (value is int) {
+      if (value >= 1000) return 'advanced';
+      if (value >= 400) return 'intermediate';
+      if (value >= 0) return 'beginner';
+    }
+    return null;
+  }
+
+  static int? _experienceToPoints(String? value) {
+    switch (value) {
+      case 'beginner':
+        return 0;
+      case 'intermediate':
+        return 400;
+      case 'advanced':
+        return 1000;
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+    final profileAsync = ref.watch(userProfileDocProvider);
+
+    profileAsync.when(
+      data: (data) {
+        if (!_initializedFromProfile && data != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() {
+              _loadProfile(data);
+              _initializedFromProfile = true;
+            });
+          });
+        } else if (!_initializedFromProfile) {
+          _initializedFromProfile = true;
+        }
+      },
+      error: (_, __) {
+        if (!_initializedFromProfile) {
+          _initializedFromProfile = true;
+        }
+      },
+      loading: () {},
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Completar Perfil'),
@@ -147,7 +307,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _selectedGender,
+                            initialValue: _selectedGender,
                             decoration: const InputDecoration(
                               labelText: 'Género',
                               prefixIcon: Icon(Icons.wc),
@@ -226,7 +386,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                     
                     // Experience Level
                     DropdownButtonFormField<String>(
-                      value: _selectedExperience,
+                      initialValue: _selectedExperience,
                       decoration: const InputDecoration(
                         labelText: 'Nivel de Experiencia',
                         prefixIcon: Icon(Icons.fitness_center),
@@ -271,7 +431,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
               
               // Skip Button
               TextButton(
-                onPressed: () => context.go('/home'),
+                onPressed: () => context.go('/map'),
                 child: const Text('Saltar por ahora'),
               ),
             ],
