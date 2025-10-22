@@ -1,5 +1,6 @@
 import java.util.Properties
 import com.android.build.gradle.LibraryExtension
+import org.gradle.api.tasks.compile.JavaCompile
 
 allprojects {
     repositories {
@@ -81,5 +82,13 @@ subprojects {
         if (androidExt.compileSdk == null || androidExt.compileSdk!! < 33) {
             androidExt.compileSdk = 35
         }
+    }
+}
+
+// Fuerza todas las tareas Java a compilar con release 21 (evita target=8 obsoleto)
+subprojects {
+    tasks.withType<JavaCompile>().configureEach {
+        sourceCompatibility = JavaVersion.VERSION_21.toString()
+        targetCompatibility = JavaVersion.VERSION_21.toString()
     }
 }

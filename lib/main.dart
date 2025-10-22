@@ -10,6 +10,7 @@ import 'firebase_options.dart';
 import 'core/env_config.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/navigation/app_router.dart';
+import 'core/map_icons.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +20,10 @@ Future<void> main() async {
   if (baseApiUrl.isEmpty) {
     throw StateError('BASE_API_URL is not set in .env');
   }
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: DynamicMap(),
+  ));
 
   // Inicializar Firebase
   await Firebase.initializeApp(

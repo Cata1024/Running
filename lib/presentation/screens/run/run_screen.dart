@@ -1,14 +1,19 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:geolocator/geolocator.dart';
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/map_icons.dart';
-import '../../../core/widgets/glass_container.dart';
+import '../../../core/widgets/aero_surface.dart';
 import '../../../domain/services/circuit_closure_validator.dart';
 import '../../../domain/services/territory_service.dart';
+import '../../../domain/track_processing/track_processing.dart';
 import '../../providers/app_providers.dart';
 import '../../utils/map_style_utils.dart';
 
@@ -70,6 +75,8 @@ Set<Polygon> _parseTerritoryPolygons(
   return out;
 }
 
+enum _GpsStatus { initial, strong, medium, weak }
+
 class _RunScreenState extends ConsumerState<RunScreen> {
   // Tracking variables
   StreamSubscription<Position>? _positionStream;
@@ -78,9 +85,28 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   bool _isRunning = false;
   bool _isPaused = false;
   List<LatLng> _routePoints = [];
+  List<TrackPoint> _rawTrack = [];
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
   GoogleMapController? _mapController;
+  bool _isHudCollapsed = false;
+  _GpsStatus _gpsStatus = _GpsStatus.initial;
+  double? _lastAccuracy;
+
+  final List<String> _terrainOptions = const [
+    'urbano',
+    'trail',
+    'mixto',
+    'pista',
+  ];
+
+  final List<String> _moodOptions = const [
+    'motivado',
+    'relajado',
+    'enfocado',
+    'competitivo',
+    'cansado',
+  ];
 
   // Stats
   Duration _elapsedTime = Duration.zero;
@@ -91,6 +117,57 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   LatLng _currentLocation = const LatLng(4.6097, -74.0817);
   Timer? _timer;
   MapIconsBundle? _iconBundle;
+
+  void _toggleHud() {
+    setState(() {
+      _isHudCollapsed = !_isHudCollapsed;
+    });
+  }
+
+  String _formattedPace() {
+    if (_totalDistance <= 0 || _elapsedTime.inSeconds <= 0) {
+      return '--:--';
+    }
+    final double paceSecPerKm = _elapsedTime.inSeconds / _totalDistance;
+    final int minutes = paceSecPerKm ~/ 60;
+    final int seconds = (paceSecPerKm % 60).round();
+    final String mm = minutes.toString().padLeft(2, '0');
+    final String ss = seconds.toString().padLeft(2, '0');
+    return '$mm:$ss';
+  }
+
+  _GpsStatus _deriveGpsStatus(double? accuracy) {
+    if (accuracy == null) return _GpsStatus.initial;
+    if (accuracy <= 10) return _GpsStatus.strong;
+    if (accuracy <= 25) return _GpsStatus.medium;
+    return _GpsStatus.weak;
+  }
+
+  Color _gpsStatusColor(ThemeData theme) {
+    switch (_gpsStatus) {
+      case _GpsStatus.strong:
+        return theme.colorScheme.primary;
+      case _GpsStatus.medium:
+        return theme.colorScheme.tertiary;
+      case _GpsStatus.weak:
+        return theme.colorScheme.error;
+      case _GpsStatus.initial:
+        return theme.colorScheme.outlineVariant;
+    }
+  }
+
+  String _gpsStatusLabel() {
+    switch (_gpsStatus) {
+      case _GpsStatus.strong:
+        return 'GPS fuerte';
+      case _GpsStatus.medium:
+        return 'GPS medio';
+      case _GpsStatus.weak:
+        return 'GPS débil';
+      case _GpsStatus.initial:
+        return 'GPS iniciando';
+    }
+  }
 
   Set<Marker> _buildMarkers([MapIconsBundle? bundle]) {
     final icons = bundle ?? _iconBundle;
@@ -187,6 +264,8 @@ class _RunScreenState extends ConsumerState<RunScreen> {
 
       setState(() {
         _currentLocation = LatLng(position.latitude, position.longitude);
+        _lastAccuracy = position.accuracy.isFinite ? position.accuracy : null;
+        _gpsStatus = _deriveGpsStatus(_lastAccuracy);
         _markers = _buildMarkers();
       });
 
@@ -208,6 +287,13 @@ class _RunScreenState extends ConsumerState<RunScreen> {
     ).listen((Position position) {
       if (!mounted) return;
       final newLocation = LatLng(position.latitude, position.longitude);
+      final sample = TrackPoint(
+        lat: position.latitude,
+        lon: position.longitude,
+        ele: position.altitude.isFinite ? position.altitude : null,
+        timestamp: DateTime.now(),
+        hdop: position.accuracy.isFinite ? position.accuracy : null,
+      );
 
       if (_routePoints.isNotEmpty) {
         final lastPoint = _routePoints.last;
@@ -225,6 +311,9 @@ class _RunScreenState extends ConsumerState<RunScreen> {
       setState(() {
         _currentLocation = newLocation;
         _routePoints.add(newLocation);
+        _rawTrack.add(sample);
+        _lastAccuracy = position.accuracy.isFinite ? position.accuracy : null;
+        _gpsStatus = _deriveGpsStatus(_lastAccuracy);
         _markers = _buildMarkers();
         _polylines = _buildPolylines(theme);
       });
@@ -245,7 +334,6 @@ class _RunScreenState extends ConsumerState<RunScreen> {
 
   Future<void> _toggleRun() async {
     if (_isRunning) {
-      // Stop run: detener streams y guardar en Firestore
       _positionStream?.cancel();
       _timer?.cancel();
       setState(() {
@@ -253,7 +341,28 @@ class _RunScreenState extends ConsumerState<RunScreen> {
         _isPaused = false;
         _markers = _buildMarkers();
       });
-      await _saveRunToBackend();
+      ref.read(runStateProvider.notifier).setRunning(isRunning: false);
+
+      try {
+        final conditions = await _promptRunConditions();
+        await _saveRunToBackend(conditions: conditions);
+        if (!mounted) return;
+        if (conditions != null) {
+          HapticFeedback.mediumImpact();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Carrera guardada exitosamente')),
+          );
+        }
+      } catch (e) {
+        debugPrint('Error finalizando la carrera: $e');
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo guardar la carrera: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
     } else {
       // Start run: resetear estado y comenzar tracking
       setState(() {
@@ -262,10 +371,15 @@ class _RunScreenState extends ConsumerState<RunScreen> {
         _elapsedTime = Duration.zero;
         _totalDistance = 0.0;
         _routePoints = [];
-        _startedAt = DateTime.now();
+        _rawTrack = [];
         _markers = _buildMarkers();
-        _polylines = const <Polyline>{};
+        _polylines = {};
+        _startedAt = DateTime.now();
       });
+      ref.read(runStateProvider.notifier).setRunning(
+            isRunning: true,
+            isPaused: false,
+          );
       _startTracking();
     }
   }
@@ -276,8 +390,7 @@ class _RunScreenState extends ConsumerState<RunScreen> {
         _isPaused = !_isPaused;
         _markers = _buildMarkers();
       });
-
-      // no-op for animation removed
+      ref.read(runStateProvider.notifier).setPaused(_isPaused);
     }
   }
 
@@ -289,29 +402,297 @@ class _RunScreenState extends ConsumerState<RunScreen> {
     return '$hours:$minutes:$seconds';
   }
 
-  Future<void> _saveRunToBackend() async {
+  List<Map<String, dynamic>> _trackPointsToJsonList(List<TrackPoint> points) {
+    return points
+        .map((p) => {
+              'lat': p.lat,
+              'lon': p.lon,
+              if (p.ele != null) 'ele': p.ele,
+              'timestamp': p.timestamp.toIso8601String(),
+              if (p.hdop != null) 'hdop': p.hdop,
+              if (p.hr != null) 'hr': p.hr,
+            })
+        .toList();
+  }
+
+  String _buildRawGpx(List<TrackPoint> points) {
+    final buffer = StringBuffer()
+      ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
+      ..writeln(
+          '<gpx version="1.1" creator="TerritoryRun" xmlns="http://www.topografix.com/GPX/1/1">')
+      ..writeln('  <trk>');
+    final name =
+        _startedAt?.toIso8601String() ?? DateTime.now().toIso8601String();
+    buffer
+      ..writeln('    <name>$name</name>')
+      ..writeln('    <trkseg>');
+    for (final point in points) {
+      buffer.writeln(
+          '      <trkpt lat="${point.lat}" lon="${point.lon}">${point.ele != null ? '<ele>${point.ele}</ele>' : ''}<time>${point.timestamp.toUtc().toIso8601String()}</time></trkpt>');
+    }
+    buffer
+      ..writeln('    </trkseg>')
+      ..writeln('  </trk>')
+      ..writeln('</gpx>');
+    return buffer.toString();
+  }
+
+  Future<Map<String, dynamic>> _uploadTrackArtifacts(
+    String uid,
+    TrackProcessingResult processing,
+  ) async {
+    if (_rawTrack.isEmpty) {
+      return const {
+        'rawTrackPath': null,
+        'rawTrackUrl': null,
+        'detailedTrackPath': null,
+        'detailedTrackUrl': null,
+      };
+    }
+
+    final storage = ref.read(storageServiceProvider);
+    final timestampKey = _startedAt?.millisecondsSinceEpoch ??
+        DateTime.now().millisecondsSinceEpoch;
+    final basePath = 'runs/$uid/$timestampKey';
+    final info = <String, dynamic>{
+      'rawTrackPath': null,
+      'rawTrackUrl': null,
+      'detailedTrackPath': null,
+      'detailedTrackUrl': null,
+      'samples': {
+        'raw': _rawTrack.length,
+        'smoothed': processing.smoothedTrack.length,
+        'resampled': processing.resampledTrack.length,
+        'simplified': processing.simplifiedTrack.length,
+      },
+    };
+
+    try {
+      final gpx = _buildRawGpx(_rawTrack);
+      final rawPath = '$basePath/raw.gpx';
+      final rawBytes = Uint8List.fromList(utf8.encode(gpx));
+      final rawUrl = await storage.uploadBytes(
+        path: rawPath,
+        data: rawBytes,
+        contentType: 'application/gpx+xml',
+      );
+      info['rawTrackPath'] = rawPath;
+      info['rawTrackUrl'] = rawUrl;
+    } catch (e) {
+      debugPrint('Error uploading raw GPX: $e');
+    }
+
+    try {
+      final detailedPayload = {
+        'generatedAt': DateTime.now().toIso8601String(),
+        'simplification': processing.simplificationMetadata,
+        'smoothedTrack': _trackPointsToJsonList(processing.smoothedTrack),
+        'resampledTrack': _trackPointsToJsonList(processing.resampledTrack),
+        'simplifiedTrack': _trackPointsToJsonList(processing.simplifiedTrack),
+      };
+      final detailedPath = '$basePath/detailed.json';
+      final detailedBytes =
+          Uint8List.fromList(utf8.encode(jsonEncode(detailedPayload)));
+      final detailedUrl = await storage.uploadBytes(
+        path: detailedPath,
+        data: detailedBytes,
+        contentType: 'application/json',
+      );
+      info['detailedTrackPath'] = detailedPath;
+      info['detailedTrackUrl'] = detailedUrl;
+    } catch (e) {
+      debugPrint('Error uploading detailed track JSON: $e');
+    }
+
+    return info;
+  }
+
+  Future<Map<String, dynamic>?> _promptRunConditions() async {
+    if (!mounted) return null;
+
+    String? selectedTerrain = _terrainOptions.first;
+    String? selectedMood = _moodOptions.first;
+    String? weatherCondition;
+    String temperatureText = '';
+
+    final weatherController = TextEditingController(text: weatherCondition);
+    final temperatureController = TextEditingController(text: temperatureText);
+
+    Map<String, dynamic>? result;
+    try {
+      result = await showModalBottomSheet<Map<String, dynamic>>(
+        context: context,
+        isScrollControlled: true,
+        builder: (ctx) {
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 24,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            ),
+            child: StatefulBuilder(
+              builder: (context, setModalState) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Detalles de la carrera',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedTerrain,
+                      decoration: const InputDecoration(
+                        labelText: 'Terreno',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _terrainOptions
+                          .map((option) => DropdownMenuItem(
+                                value: option,
+                                child: Text(option),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        setModalState(() {
+                          selectedTerrain = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedMood,
+                      decoration: const InputDecoration(
+                        labelText: 'Estado de ánimo',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: _moodOptions
+                          .map((option) => DropdownMenuItem(
+                                value: option,
+                                child: Text(option),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        setModalState(() {
+                          selectedMood = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: weatherController,
+                      decoration: const InputDecoration(
+                        labelText: 'Clima',
+                        hintText: 'Despejado, lluvioso, etc.',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        setModalState(() {
+                          weatherCondition = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: temperatureController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true, signed: false),
+                      decoration: const InputDecoration(
+                        labelText: 'Temperatura (°C)',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) {
+                        setModalState(() {
+                          temperatureText = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          double? temperature;
+                          if (temperatureText.trim().isNotEmpty) {
+                            temperature =
+                                double.tryParse(temperatureText.trim());
+                          }
+                          Navigator.of(context).pop({
+                            'terrain': selectedTerrain,
+                            'mood': selectedMood,
+                            'weather': {
+                              'condition':
+                                  weatherController.text.trim().isNotEmpty
+                                      ? weatherController.text.trim()
+                                      : null,
+                              'temperatureC': temperature,
+                            },
+                          });
+                        },
+                        child: const Text('Guardar detalles'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop(null);
+                        },
+                        child: const Text('Omitir'),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          );
+        },
+      );
+    } finally {
+      weatherController.dispose();
+      temperatureController.dispose();
+    }
+
+    return result;
+  }
+
+  Future<void> _saveRunToBackend({Map<String, dynamic>? conditions}) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
       if (_startedAt == null) return;
       final endedAt = DateTime.now();
 
-      final coords = _routePoints
-          .map((p) => [p.longitude, p.latitude])
-          .toList(growable: false);
+      final processing = await processTrackPipeline(_rawTrack);
+      final processedTrack = processing.simplifiedTrack.isNotEmpty
+          ? processing.simplifiedTrack
+          : _rawTrack;
 
-      // Validar cierre de circuito y preparar polígono/área
+      if (mounted && processedTrack.isNotEmpty) {
+        final theme = Theme.of(context);
+        setState(() {
+          _routePoints = processedTrack
+              .map((p) => LatLng(p.lat, p.lon))
+              .toList(growable: false);
+          _currentLocation = _routePoints.last;
+          _markers = _buildMarkers();
+          _polylines = _buildPolylines(theme);
+        });
+      }
+
       final isClosed = const CircuitClosureValidator().isClosedCircuit(
-        routePoints: _routePoints,
+        routePoints: processedTrack,
         duration: _elapsedTime,
       );
 
       Map<String, dynamic>? polygonGeoJson;
       double? areaGainedM2;
       Map<String, dynamic>? updatedTerritory;
-      if (isClosed && _routePoints.length >= 3) {
-        final territoryService = const TerritoryService();
-        polygonGeoJson = territoryService.buildPolygonFromRoute(_routePoints);
+      final territoryService = const TerritoryService();
+      if (isClosed && processedTrack.length >= 3) {
+        polygonGeoJson = territoryService.buildPolygonFromTrack(processedTrack);
         areaGainedM2 = territoryService.polygonAreaM2(polygonGeoJson);
         final existingTerritory =
             await ref.read(userTerritoryDocProvider.future);
@@ -322,32 +703,62 @@ class _RunScreenState extends ConsumerState<RunScreen> {
         );
       }
 
+      final distanceMeters = processing.distanceMeters > 0
+          ? processing.distanceMeters
+          : (_totalDistance * 1000);
+      final movingTimeSeconds = processing.movingTimeSeconds > 0
+          ? processing.movingTimeSeconds
+          : _elapsedTime.inSeconds;
+      final distanceKm = distanceMeters / 1000;
+
+      final routeGeoJson =
+          territoryService.buildLineStringFromTrack(processedTrack);
+      final storageInfo = await _uploadTrackArtifacts(uid, processing);
+      final runConditions = conditions ??
+          {
+            'terrain': null,
+            'mood': null,
+            'weather': {
+              'condition': null,
+              'temperatureC': null,
+            },
+          };
+
       final runData = {
         'userId': uid,
         'startedAt': _startedAt!.toIso8601String(),
         'endedAt': endedAt.toIso8601String(),
-        'distanceM': (_totalDistance * 1000).round(),
-        'durationS': _elapsedTime.inSeconds,
-        'avgPaceSecPerKm': _totalDistance > 0
-            ? (_elapsedTime.inSeconds / _totalDistance)
-            : null,
+        'distanceM': distanceMeters.round(),
+        'durationS': movingTimeSeconds,
+        'avgPaceSecPerKm':
+            distanceKm > 0 ? (movingTimeSeconds / distanceKm) : null,
         'isClosedCircuit': isClosed,
-        'startLat': _routePoints.isNotEmpty
-            ? _routePoints.first.latitude
+        'startLat': processedTrack.isNotEmpty
+            ? processedTrack.first.lat
             : _currentLocation.latitude,
-        'startLon': _routePoints.isNotEmpty
-            ? _routePoints.first.longitude
+        'startLon': processedTrack.isNotEmpty
+            ? processedTrack.first.lon
             : _currentLocation.longitude,
-        'endLat': _routePoints.isNotEmpty
-            ? _routePoints.last.latitude
+        'endLat': processedTrack.isNotEmpty
+            ? processedTrack.last.lat
             : _currentLocation.latitude,
-        'endLon': _routePoints.isNotEmpty
-            ? _routePoints.last.longitude
+        'endLon': processedTrack.isNotEmpty
+            ? processedTrack.last.lon
             : _currentLocation.longitude,
-        'routeGeoJson': {
-          'type': 'LineString',
-          'coordinates': coords,
+        'routeGeoJson': routeGeoJson,
+        'summaryPolyline': processing.summaryPolyline,
+        'simplification': processing.simplificationMetadata,
+        'metrics': {
+          'distanceKm': distanceKm,
+          'movingTimeS': movingTimeSeconds,
+          'avgSpeedKmh': movingTimeSeconds > 0
+              ? (distanceMeters / movingTimeSeconds) * 3.6
+              : null,
+          'paceSecPerKm':
+              distanceKm > 0 ? (movingTimeSeconds / distanceKm) : null,
         },
+        'conditions': runConditions,
+        'storage': storageInfo,
         if (polygonGeoJson != null) 'polygonGeoJson': polygonGeoJson,
         if (areaGainedM2 != null) 'areaGainedM2': areaGainedM2,
         'synced': true,
@@ -368,12 +779,31 @@ class _RunScreenState extends ConsumerState<RunScreen> {
           (profile?['totalDistance'] as num?)?.toDouble() ?? 0.0;
       final currentTotalTime = (profile?['totalTime'] as num?)?.toInt() ?? 0;
 
-      await api.patchUserProfile(uid, {
+      final totalsUpdate = <String, dynamic>{
         'totalRuns': currentTotalRuns + 1,
-        'totalDistance': currentTotalDistance + _totalDistance,
-        'totalTime': currentTotalTime + _elapsedTime.inSeconds,
+        'totalDistance': currentTotalDistance + distanceKm,
+        'totalTime': currentTotalTime + movingTimeSeconds,
         'lastActivityAt': endedAt.toIso8601String(),
-      });
+      };
+
+      if (profile == null || profile.isEmpty) {
+        final firebaseUser = FirebaseAuth.instance.currentUser;
+        final upsertPayload = <String, dynamic>{
+          'email': firebaseUser?.email,
+          'displayName': firebaseUser?.displayName,
+          'photoUrl': firebaseUser?.photoURL,
+          'preferredUnits': 'metric',
+          'level': 1,
+          'experience': 0,
+          'achievements': const <String>[],
+          'createdAt': _startedAt!.toIso8601String(),
+          ...totalsUpdate,
+        };
+        upsertPayload.removeWhere((key, value) => value == null);
+        await api.upsertUserProfile(uid, upsertPayload);
+      } else {
+        await api.patchUserProfile(uid, totalsUpdate);
+      }
 
       ref.invalidate(userRunsProvider);
       ref.invalidate(runDocProvider(runId));
@@ -391,326 +821,486 @@ class _RunScreenState extends ConsumerState<RunScreen> {
     final mapType = ref.watch(mapTypeProvider);
     final mapStyle = ref.watch(mapStyleProvider);
     final styleString = resolveMapStyle(mapStyle, theme.brightness);
+    final runState = ref.watch(runStateProvider);
+    final mediaPadding = MediaQuery.of(context).padding;
+    final bool navVisible = !(runState.isRunning && !runState.isPaused);
+    const double navHeight = 64;
+    final double navBottomPadding =
+        mediaPadding.bottom + TerritoryTokens.space24;
+    final double bottomOffset = navVisible
+        ? navHeight + navBottomPadding + TerritoryTokens.space12
+        : mediaPadding.bottom + TerritoryTokens.space16;
+    final double topOffset = mediaPadding.top + TerritoryTokens.space16;
     final Set<Polygon> territoryPolygons = territoryAsync.maybeWhen(
       data: (doc) => _parseTerritoryPolygons(doc, theme),
       orElse: () => <Polygon>{},
     );
 
     return Scaffold(
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // Mapa a pantalla completa
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(24),
-                bottomRight: Radius.circular(24),
+      extendBody: true,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: _currentLocation,
+                zoom: 17,
               ),
-              child: GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: _currentLocation,
-                  zoom: 17,
-                ),
-                markers: _markers,
-                polylines: _polylines,
-                polygons: territoryPolygons,
-                mapType: mapType,
-                style: styleString,
-                onMapCreated: (controller) {
-                  _mapController = controller;
-                },
-                myLocationEnabled: true,
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
-              ),
+              markers: _markers,
+              polylines: _polylines,
+              polygons: territoryPolygons,
+              mapType: mapType,
+              style: styleString,
+              onMapCreated: (controller) {
+                _mapController = controller;
+              },
+              myLocationEnabled: true,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
             ),
-
-            // Stats overlay - Tamaño optimizado con mejor contraste
-            Positioned(
-              top: 16,
-              left: 16,
-              right: 16,
-              child: GlassContainer(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                backgroundColor: Colors.white.withValues(alpha: 0.6),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    // Tiempo
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(
-                            _formatTime(_elapsedTime),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black,
-                                  blurRadius: 2,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            'Tiempo',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: Colors.black.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Distancia
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(
-                            _totalDistance.toStringAsFixed(2),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black,
-                                  blurRadius: 2,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            'km',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: Colors.black.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Ritmo
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Text(
-                            _totalDistance > 0
-                                ? (() {
-                                    final paceSecPerKm =
-                                        _elapsedTime.inSeconds / _totalDistance;
-                                    final m = (paceSecPerKm / 60).floor();
-                                    final s = (paceSecPerKm % 60)
-                                        .round()
-                                        .toString()
-                                        .padLeft(2, '0');
-                                    return '$m:$s';
-                                  })()
-                                : '--:--',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black,
-                                  blurRadius: 2,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            'min/km',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: Colors.black.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          ),
+          Positioned(
+            top: topOffset,
+            left: TerritoryTokens.space16,
+            right: TerritoryTokens.space16,
+            child: _RunHud(
+              elapsedLabel: _formatTime(_elapsedTime),
+              distanceLabel: _totalDistance.toStringAsFixed(2),
+              paceLabel: _formattedPace(),
+              gpsLabel: _gpsStatusLabel(),
+              gpsColor: _gpsStatusColor(theme),
+              accuracy: _lastAccuracy,
+              isCollapsed: _isHudCollapsed,
+              isRunning: _isRunning,
+              isPaused: _isPaused,
+              onToggle: _toggleHud,
             ),
-
-            // Indicador de estado
-            if (_isRunning || _isPaused)
-              Positioned(
-                top: 80,
-                left: 16,
-                child: GlassContainer(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  backgroundColor: Colors.white.withValues(alpha: 0.6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _isPaused ? Colors.orange : Colors.green,
-                          boxShadow: [
-                            BoxShadow(
-                              color: (_isPaused ? Colors.orange : Colors.green)
-                                  .withValues(alpha: 0.6),
-                              blurRadius: 6,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _isPaused ? 'PAUSADO' : 'CORRIENDO',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          letterSpacing: 0.5,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black,
-                              blurRadius: 3,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+          ),
+          Positioned(
+            left: TerritoryTokens.space16,
+            right: TerritoryTokens.space16,
+            bottom: bottomOffset,
+            child: _ControlPanel(
+              isRunning: _isRunning,
+              isPaused: _isPaused,
+              onCenter: () => _mapController?.animateCamera(
+                CameraUpdate.newLatLngZoom(_currentLocation, 17),
               ),
-
-            // Barra de control
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 16,
-              child: GlassContainer(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                backgroundColor: Colors.white.withValues(alpha: 0.6),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    // Botón Centrar
-                    _ControlButton(
-                      icon: Icons.my_location,
-                      label: 'Centrar',
-                      onTap: () => _mapController?.animateCamera(
-                          CameraUpdate.newLatLngZoom(_currentLocation, 17)),
-                      isPrimary: false,
-                    ),
-                    const SizedBox(width: 12),
-                    // Botón Principal (Iniciar/Detener)
-                    _ControlButton(
-                      icon: _isRunning
-                          ? Icons.stop_rounded
-                          : Icons.play_arrow_rounded,
-                      label: _isRunning ? 'Detener' : 'Iniciar',
-                      onTap: _toggleRun,
-                      isPrimary: true,
-                      color: _isRunning ? Colors.red : Colors.green,
-                    ),
-                    const SizedBox(width: 12),
-                    // Botón Pausa
-                    if (_isRunning)
-                      IconButton(
-                        icon: Icon(
-                          _isPaused ? Icons.play_arrow : Icons.pause,
-                          color: Colors.white,
-                        ),
-                        onPressed: _pauseRun,
-                      ),
-                  ],
-                ),
-              ),
+              onToggleRun: _toggleRun,
+              onTogglePause: _isRunning ? _pauseRun : null,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// Widget mejorado para botones de control
-class _ControlButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool isPrimary;
-  final Color? color;
+class _RunHud extends StatelessWidget {
+  final String elapsedLabel;
+  final String distanceLabel;
+  final String paceLabel;
+  final String gpsLabel;
+  final Color gpsColor;
+  final double? accuracy;
+  final bool isCollapsed;
+  final bool isRunning;
+  final bool isPaused;
+  final VoidCallback onToggle;
 
-  const _ControlButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.isPrimary = false,
-    this.color,
+  const _RunHud({
+    required this.elapsedLabel,
+    required this.distanceLabel,
+    required this.paceLabel,
+    required this.gpsLabel,
+    required this.gpsColor,
+    required this.accuracy,
+    required this.isCollapsed,
+    required this.isRunning,
+    required this.isPaused,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onToggle,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedSwitcher(
+        duration: TerritoryTokens.durationFast,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: SizeTransition(
+            sizeFactor: animation,
+            axisAlignment: -1,
+            child: child,
+          ),
+        ),
+        child: isCollapsed
+            ? _CollapsedHud(
+                gpsLabel: gpsLabel,
+                gpsColor: gpsColor,
+                isRunning: isRunning,
+                isPaused: isPaused,
+              )
+            : _ExpandedHud(
+                elapsedLabel: elapsedLabel,
+                distanceLabel: distanceLabel,
+                paceLabel: paceLabel,
+                gpsLabel: gpsLabel,
+                gpsColor: gpsColor,
+                accuracy: accuracy,
+              ),
+      ),
+    );
+  }
+}
+
+class _ExpandedHud extends StatelessWidget {
+  final String elapsedLabel;
+  final String distanceLabel;
+  final String paceLabel;
+  final String gpsLabel;
+  final Color gpsColor;
+  final double? accuracy;
+
+  const _ExpandedHud({
+    required this.elapsedLabel,
+    required this.distanceLabel,
+    required this.paceLabel,
+    required this.gpsLabel,
+    required this.gpsColor,
+    required this.accuracy,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final effectiveColor = color ?? theme.colorScheme.primary;
+    final textStyle = theme.textTheme.titleMedium?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+      fontWeight: FontWeight.w600,
+    );
 
-    return GestureDetector(
-      onTap: onTap,
+    return AeroSurface(
+      level: AeroLevel.medium,
+      borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
+      padding: const EdgeInsets.symmetric(
+        horizontal: TerritoryTokens.space16,
+        vertical: TerritoryTokens.space12,
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: isPrimary ? 48 : 44,
-            height: isPrimary ? 48 : 44,
-            decoration: BoxDecoration(
-              color: isPrimary
-                  ? effectiveColor
-                  : theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(isPrimary ? 24 : 14),
-              border: isPrimary
-                  ? null
-                  : Border.all(
-                      color: theme.colorScheme.outline.withValues(alpha: 0.3),
-                      width: 1,
-                    ),
-              boxShadow: isPrimary
-                  ? [
-                      BoxShadow(
-                        color: effectiveColor.withValues(alpha: 0.4),
-                        blurRadius: 8,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : null,
+          Row(
+            children: [
+              _StatChip(
+                label: 'Tiempo',
+                value: elapsedLabel,
+                textStyle: textStyle,
+              ),
+              const SizedBox(width: TerritoryTokens.space12),
+              _StatChip(
+                label: 'Distancia',
+                value: '$distanceLabel km',
+                textStyle: textStyle,
+              ),
+              const SizedBox(width: TerritoryTokens.space12),
+              _StatChip(
+                label: 'Ritmo',
+                value: '$paceLabel min/km',
+                textStyle: textStyle,
+              ),
+            ],
+          ),
+          const SizedBox(height: TerritoryTokens.space12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: gpsColor,
+                  boxShadow: TerritoryTokens.shadowSubtle(gpsColor),
+                ),
+              ),
+              const SizedBox(width: TerritoryTokens.space8),
+              Expanded(
+                child: Text(
+                  accuracy != null
+                      ? '$gpsLabel · ±${accuracy!.toStringAsFixed(1)}m'
+                      : gpsLabel,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              Icon(
+                Icons.expand_less,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CollapsedHud extends StatelessWidget {
+  final String gpsLabel;
+  final Color gpsColor;
+  final bool isRunning;
+  final bool isPaused;
+
+  const _CollapsedHud({
+    required this.gpsLabel,
+    required this.gpsColor,
+    required this.isRunning,
+    required this.isPaused,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final statusColor = isPaused
+        ? theme.colorScheme.tertiary
+        : isRunning
+            ? theme.colorScheme.primary
+            : theme.colorScheme.outlineVariant;
+    final statusLabel = isPaused
+        ? 'Pausado'
+        : isRunning
+            ? 'Corriendo'
+            : 'Listo';
+
+    return AeroSurface(
+      level: AeroLevel.subtle,
+      borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
+      padding: const EdgeInsets.symmetric(
+        horizontal: TerritoryTokens.space16,
+        vertical: TerritoryTokens.space12,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.insights,
+            color: statusColor,
+          ),
+          const SizedBox(width: TerritoryTokens.space12),
+          Expanded(
+            child: Text(
+              statusLabel,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            child: Icon(
-              icon,
-              color: isPrimary ? Colors.white : Colors.black.withValues(alpha: 0.8),
-              size: isPrimary ? 24 : 20,
+          ),
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: gpsColor,
+              boxShadow: TerritoryTokens.shadowSubtle(gpsColor),
+            ),
+          ),
+          const SizedBox(width: TerritoryTokens.space8),
+          Text(
+            gpsLabel,
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(width: TerritoryTokens.space8),
+          Icon(
+            Icons.expand_more,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final TextStyle? textStyle;
+
+  const _StatChip({
+    required this.label,
+    required this.value,
+    required this.textStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: isPrimary ? FontWeight.bold : FontWeight.w500,
-              color: Colors.black,
-              shadows: const [
-                Shadow(
-                  color: Colors.white,
-                  blurRadius: 2,
-                ),
-              ],
-            ),
+            value,
+            style: textStyle,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ControlPanel extends StatelessWidget {
+  final bool isRunning;
+  final bool isPaused;
+  final VoidCallback onCenter;
+  final VoidCallback onToggleRun;
+  final VoidCallback? onTogglePause;
+
+  const _ControlPanel({
+    required this.isRunning,
+    required this.isPaused,
+    required this.onCenter,
+    required this.onToggleRun,
+    required this.onTogglePause,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final buttonSpacing = TerritoryTokens.space12;
+
+    final buttons = <Widget>[
+      Expanded(
+        child: _ControlButton(
+          icon: Icons.my_location,
+          label: 'Centrar',
+          onTap: onCenter,
+          backgroundColor: theme.colorScheme.surfaceContainerHighest
+              .withValues(alpha: 0.7),
+          foregroundColor: theme.colorScheme.onSurface,
+        ),
+      ),
+      SizedBox(width: buttonSpacing),
+      Expanded(
+        flex: 2,
+        child: _ControlButton(
+          icon: isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
+          label: isRunning ? 'Detener' : 'Iniciar',
+          onTap: onToggleRun,
+          backgroundColor: (isRunning
+                  ? theme.colorScheme.error
+                  : theme.colorScheme.primary)
+              .withValues(alpha: 0.9),
+          foregroundColor: isRunning
+              ? theme.colorScheme.onError
+              : theme.colorScheme.onPrimary,
+        ),
+      ),
+    ];
+
+    if (isRunning) {
+      buttons
+        ..add(SizedBox(width: buttonSpacing))
+        ..add(
+          Expanded(
+            child: _ControlButton(
+              icon: isPaused ? Icons.play_arrow : Icons.pause,
+              label: isPaused ? 'Reanudar' : 'Pausar',
+              onTap: onTogglePause,
+              backgroundColor:
+                  theme.colorScheme.tertiary.withValues(alpha: 0.85),
+              foregroundColor: theme.colorScheme.onTertiary,
+            ),
+          ),
+        );
+    }
+
+    return AeroSurface(
+      level: AeroLevel.medium,
+      borderRadius: BorderRadius.circular(TerritoryTokens.radiusPill),
+      padding: const EdgeInsets.symmetric(
+        horizontal: TerritoryTokens.space16,
+        vertical: TerritoryTokens.space12,
+      ),
+      child: Row(children: buttons),
+    );
+  }
+}
+
+class _ControlButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final Color backgroundColor;
+  final Color foregroundColor;
+
+  const _ControlButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.backgroundColor,
+    required this.foregroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final disabled = onTap == null;
+
+    return Opacity(
+      opacity: disabled ? 0.6 : 1,
+      child: GestureDetector(
+        onTap: disabled ? null : onTap,
+        child: SizedBox(
+          height: 56,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
+              border: Border.all(
+                color:
+                    theme.colorScheme.outlineVariant.withValues(alpha: 0.24),
+              ),
+              boxShadow: TerritoryTokens.shadowSubtle(
+                theme.colorScheme.shadow,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: TerritoryTokens.space16,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  Icon(icon, color: foregroundColor, size: 24),
+                  const SizedBox(width: TerritoryTokens.space8),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: foregroundColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
-import 'glass_button.dart';
+import '../design_system/territory_tokens.dart';
+import 'aero_button.dart';
 
 /// Widget para mostrar estados vacíos con estilo consistente
 class EmptyState extends StatelessWidget {
@@ -23,7 +23,7 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(AppTheme.space48),
+        padding: EdgeInsets.all(TerritoryTokens.space48),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -32,7 +32,7 @@ class EmptyState extends StatelessWidget {
               size: 120,
               color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
             ),
-            SizedBox(height: AppTheme.space24),
+            SizedBox(height: TerritoryTokens.space24),
             Text(
               title,
               style: const TextStyle(
@@ -41,7 +41,7 @@ class EmptyState extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: AppTheme.space12),
+            SizedBox(height: TerritoryTokens.space12),
             Text(
               message,
               style: TextStyle(
@@ -51,8 +51,8 @@ class EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (actionLabel != null && onAction != null) ...[
-              SizedBox(height: AppTheme.space32),
-              GlassButton(
+              SizedBox(height: TerritoryTokens.space32),
+              AeroButton(
                 onPressed: onAction,
                 child: Text(actionLabel!),
               ),

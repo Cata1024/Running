@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../data/services/api_service.dart';
 import '../../data/services/firebase_auth_service.dart';
 import '../../core/map_icons.dart';
+import '../../domain/services/storage_service.dart';
 
 /// Providers básicos que funcionan con Riverpod 3.0+
 
@@ -113,11 +114,33 @@ class RunState {
   }
 }
 
+class RunStateNotifier extends Notifier<RunState> {
+  @override
+  RunState build() => const RunState();
+
+  void setRunning({required bool isRunning, bool? isPaused}) {
+    state = state.copyWith(
+      isRunning: isRunning,
+      isPaused: isPaused ?? (isRunning ? state.isPaused : false),
+    );
+  }
+
+  void setPaused(bool isPaused) {
+    state = state.copyWith(isPaused: isPaused);
+  }
+
+  void reset() => state = const RunState();
+}
+
 /// API Service provider
 final apiServiceProvider = Provider<ApiService>((ref) {
   final service = ApiService();
   ref.onDispose(service.dispose);
   return service;
+});
+
+final storageServiceProvider = Provider<StorageService>((ref) {
+  return StorageService();
 });
 
 /// Firebase Auth Service Provider
@@ -151,7 +174,9 @@ final themeProvider = NotifierProvider<ThemeModeNotifier, AppThemeMode>(
 final mapStyleProvider = NotifierProvider<MapStyleNotifier, MapVisualStyle>(
   MapStyleNotifier.new,
 );
-final runStateProvider = Provider<RunState>((ref) => const RunState());
+final runStateProvider = NotifierProvider<RunStateNotifier, RunState>(
+  RunStateNotifier.new,
+);
 
 final mapIconsProvider = FutureProvider<MapIconsBundle>((ref) async {
   return MapIcons.load();

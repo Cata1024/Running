@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +13,8 @@ import '../screens/history/history_screen.dart';
 import '../screens/history/run_detail_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../providers/app_providers.dart';
+import '../../core/widgets/aero_nav_bar.dart';
+import '../../core/design_system/territory_tokens.dart';
 
 /// Router principal de la aplicación
 final routerProvider = Provider<GoRouter>((ref) {
@@ -140,7 +144,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 });
 
 /// Shell principal de la aplicación con navegación
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   final Widget child;
 
   const AppShell({
@@ -149,50 +153,87 @@ class AppShell extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  static const List<AeroNavBarItem> _navItems = [
+    AeroNavBarItem(icon: Icons.map_outlined, label: 'Mapa'),
+    AeroNavBarItem(icon: Icons.history_outlined, label: 'Historial'),
+    AeroNavBarItem(icon: Icons.person_outline, label: 'Perfil'),
+  ];
+
+  late final Widget _persistentMap = const RunScreen();
+
+  @override
+  Widget build(BuildContext context) {
     final currentPath = GoRouterState.of(context).matchedLocation;
     int currentIndex = 0;
-    
+
     if (currentPath.startsWith('/history')) {
       currentIndex = 1;
     } else if (currentPath.startsWith('/profile')) {
       currentIndex = 2;
     }
-    
+
+    final runState = ref.watch(runStateProvider);
+    final bool onRunScreen = currentPath.startsWith('/map');
+    final bool navVisible =
+        !(onRunScreen && runState.isRunning && !runState.isPaused);
+
     return Scaffold(
-      body: child,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: currentIndex,
-        onDestinationSelected: (index) {
-          switch (index) {
-            case 0:
-              context.go('/map');
-              break;
-            case 1:
-              context.go('/history');
-              break;
-            case 2:
-              context.go('/profile');
-              break;
-          }
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.map_outlined),
-            selectedIcon: Icon(Icons.map),
-            label: 'Mapa',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history),
-            label: 'Historial',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Perfil',
+      extendBody: true,
+      body: Stack(
+        children: [
+          Positioned.fill(child: _persistentMap),
+          if (!onRunScreen)
+            Positioned.fill(
+              child: _BlurredOverlay(child: widget.child),
+            ),
+          AeroNavBar(
+            items: _navItems,
+            currentIndex: currentIndex,
+            visible: navVisible,
+            onItemSelected: (index) {
+              switch (index) {
+                case 0:
+                  context.go('/map');
+                  break;
+                case 1:
+                  context.go('/history');
+                  break;
+                case 2:
+                  context.go('/profile');
+                  break;
+              }
+            },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _BlurredOverlay extends StatelessWidget {
+  final Widget child;
+
+  const _BlurredOverlay({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final Color veilColor = scheme.surface.withValues(alpha: 0.78);
+
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaX: TerritoryTokens.blurStrong,
+          sigmaY: TerritoryTokens.blurStrong,
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: veilColor),
+          child: child,
+        ),
       ),
     );
   }

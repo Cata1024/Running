@@ -1,49 +1,64 @@
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:turf/turf.dart' as turf;
+import '../track_processing/track_processing.dart';
 
 class TerritoryService {
   const TerritoryService();
 
-  Map<String, dynamic> buildPolygonFromRoute(List<LatLng> routePoints) {
-    // Deduplicate consecutive points
-    final List<List<double>> coords = [];
-    for (final p in routePoints) {
-      final c = [p.longitude, p.latitude];
-      if (coords.isEmpty || coords.last[0] != c[0] || coords.last[1] != c[1]) {
-        coords.add(c);
+  Map<String, dynamic> buildLineStringFromTrack(List<TrackPoint> track) {
+    final coordinates = track
+        .map((point) => [point.lon, point.lat])
+        .toList(growable: false);
+    return {
+      'type': 'LineString',
+      'coordinates': coordinates,
+    };
+  }
+
+  Map<String, dynamic> buildPolygonFromTrack(List<TrackPoint> track) {
+    final coordinates = <List<double>>[];
+    for (final point in track) {
+      final coord = [point.lon, point.lat];
+      if (coordinates.isEmpty ||
+          coordinates.last[0] != coord[0] ||
+          coordinates.last[1] != coord[1]) {
+        coordinates.add(coord);
       }
     }
-    if (coords.length < 3) {
+
+    if (coordinates.length < 3) {
       return {
         'type': 'Polygon',
-        'coordinates': []
+        'coordinates': [],
       };
     }
-    // Ensure closed ring
-    if (coords.first[0] != coords.last[0] || coords.first[1] != coords.last[1]) {
-      coords.add([coords.first[0], coords.first[1]]);
+
+    if (coordinates.first[0] != coordinates.last[0] ||
+        coordinates.first[1] != coordinates.last[1]) {
+      coordinates.add([coordinates.first[0], coordinates.first[1]]);
     }
 
-    // Enforce CCW orientation for outer ring
     try {
-      final positions = coords.map((c) => turf.Position(c[0], c[1])).toList();
-      final ls = turf.LineString(coordinates: positions);
-      final isClockwise = turf.booleanClockwise(ls);
+      final positions =
+          coordinates.map((c) => turf.Position(c[0], c[1])).toList();
+      final lineString = turf.LineString(coordinates: positions);
+      final isClockwise = turf.booleanClockwise(lineString);
       if (isClockwise) {
-        // Reverse without duplicating the first/last
-        final ring = positions.sublist(0, positions.length - 1).reversed
-            .map((p) => [p.lng, p.lat]).toList();
-        ring.add(ring.first);
+        final reversed = positions
+            .sublist(0, positions.length - 1)
+            .reversed
+            .map((p) => [p.lng, p.lat])
+            .toList();
+        reversed.add(reversed.first);
         return {
           'type': 'Polygon',
-          'coordinates': [ring],
+          'coordinates': [reversed],
         };
       }
     } catch (_) {}
 
     return {
       'type': 'Polygon',
-      'coordinates': [coords],
+      'coordinates': [coordinates],
     };
   }
 

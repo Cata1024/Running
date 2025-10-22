@@ -2,20 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Tema moderno con estilo Glassmorphism y DataClean
-/// Combina translucidez, sombras suaves y minimalismo
 class AppTheme {
   // Colores principales con mejor contraste y modernidad
   static const Color primaryGradientStart = Color(0xFF00E676);
   static const Color primaryGradientEnd = Color(0xFF00BFA5);
   static const Color accentGradientStart = Color(0xFF00B0FF);
   static const Color accentGradientEnd = Color(0xFF0091EA);
-  
+
   // Colores glassmorphism
   static const Color glassSurface = Color(0x0DFFFFFF);
   static const Color glassBorder = Color(0x1AFFFFFF);
   static const Color glassOverlay = Color(0x08FFFFFF);
-  
+
   // Colores funcionales
   static const Color successColor = Color(0xFF4CAF50);
   static const Color warningColor = Color(0xFFFF9800);
@@ -33,7 +31,7 @@ class AppTheme {
   static const double space32 = 32.0;
   static const double space48 = 48.0;
   static const double space64 = 64.0;
-  
+
   // Padding presets
   static const EdgeInsets paddingSmall = EdgeInsets.all(8.0);
   static const EdgeInsets paddingMedium = EdgeInsets.all(16.0);
@@ -47,7 +45,7 @@ class AppTheme {
   static const double radiusXl = 20.0;
   static const double radius2xl = 24.0;
   static const double radiusFull = 999.0;
-  
+
   // Legacy (mantener compatibilidad)
   static const double radiusSmall = 8.0;
   static const double radiusMedium = 16.0;
@@ -89,20 +87,21 @@ class AppTheme {
 
   /// Tema claro con glassmorphism
   static ThemeData light([ColorScheme? dynamicScheme]) {
-    final scheme = dynamicScheme ?? ColorScheme.fromSeed(
-      seedColor: primaryGradientStart,
-      brightness: Brightness.light,
-      surface: Colors.grey[50]!,
-    );
+    final scheme = dynamicScheme ??
+        ColorScheme.fromSeed(
+          seedColor: primaryGradientStart,
+          brightness: Brightness.light,
+          surface: Colors.grey[50]!,
+        );
 
     final textTheme = _buildTextTheme(scheme);
-    
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: scheme,
       textTheme: textTheme,
-      
+
       // Configuración de AppBar con glassmorphism
       appBarTheme: AppBarTheme(
         systemOverlayStyle: SystemUiOverlayStyle.dark,
@@ -116,7 +115,7 @@ class AppTheme {
         ),
         iconTheme: IconThemeData(color: Colors.grey[700]),
       ),
-      
+
       // Botones con estilo glassmorphism
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -128,7 +127,8 @@ class AppTheme {
             borderRadius: BorderRadius.circular(radiusMedium),
           ),
         ).copyWith(
-          overlayColor: WidgetStateProperty.all(Colors.white.withValues(alpha: 0.1)),
+          overlayColor:
+              WidgetStateProperty.all(Colors.white.withValues(alpha: 0.1)),
           elevation: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.pressed)) return 0;
             if (states.contains(WidgetState.hovered)) return 2;
@@ -152,7 +152,8 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.grey[50],
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
           borderSide: BorderSide.none,
@@ -167,7 +168,8 @@ class AppTheme {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
-          borderSide: BorderSide(color: errorColor.withValues(alpha: 0.5), width: 1),
+          borderSide:
+              BorderSide(color: errorColor.withValues(alpha: 0.5), width: 1),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
@@ -241,7 +243,7 @@ class AppTheme {
 
       // Scaffold background
       scaffoldBackgroundColor: Colors.grey[50],
-      
+
       // Page transitions suaves
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
@@ -254,20 +256,20 @@ class AppTheme {
 
   /// Tema oscuro con glassmorphism
   static ThemeData dark([ColorScheme? dynamicScheme]) {
-    final scheme = dynamicScheme ?? ColorScheme.fromSeed(
-      seedColor: primaryGradientStart,
-      brightness: Brightness.dark,
-      surface: const Color(0xFF121212),
-    );
+    final scheme = dynamicScheme ??
+        ColorScheme.fromSeed(
+          seedColor: primaryGradientStart,
+          brightness: Brightness.dark,
+          surface: const Color(0xFF121212),
+        );
 
     final textTheme = _buildTextTheme(scheme, isDark: true);
-    
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: scheme,
       textTheme: textTheme,
-      
       appBarTheme: AppBarTheme(
         systemOverlayStyle: SystemUiOverlayStyle.light,
         backgroundColor: const Color(0xFF121212).withValues(alpha: 0.8),
@@ -280,7 +282,6 @@ class AppTheme {
         ),
         iconTheme: const IconThemeData(color: Colors.white70),
       ),
-      
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           foregroundColor: Colors.white,
@@ -292,34 +293,34 @@ class AppTheme {
           ),
         ),
       ),
-
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.05),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1),
+          borderSide:
+              BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
           borderSide: BorderSide(color: primaryGradientStart, width: 2),
         ),
       ),
-
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLarge),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1),
+          side:
+              BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1),
         ),
         color: Colors.white.withValues(alpha: 0.05),
       ),
-
       scaffoldBackgroundColor: const Color(0xFF0A0A0A),
     );
   }
@@ -328,7 +329,7 @@ class AppTheme {
   static TextTheme _buildTextTheme(ColorScheme scheme, {bool isDark = false}) {
     final baseTextColor = isDark ? Colors.white : Colors.grey[900];
     final secondaryTextColor = isDark ? Colors.white70 : Colors.grey[600];
-    
+
     return GoogleFonts.interTextTheme().copyWith(
       displayLarge: GoogleFonts.inter(
         fontSize: 57,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/widgets/glass_container.dart';
+import '../../../core/widgets/aero_container.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 

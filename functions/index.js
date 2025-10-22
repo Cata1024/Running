@@ -112,6 +112,11 @@ const allowedRunFields = [
   "routeGeoJson",
   "polygonGeoJson",
   "areaGainedM2",
+  "summaryPolyline",
+  "simplification",
+  "metrics",
+  "conditions",
+  "storage",
   "synced",
 ];
 
@@ -212,6 +217,88 @@ const validateRunPayload = (payload, { partial = false } = {}) => {
   if (payload.polygonGeoJson !== undefined) {
     const error = validatePolygon(payload.polygonGeoJson);
     if (error) errors.push(error);
+  }
+  if (payload.summaryPolyline !== undefined && payload.summaryPolyline !== null && typeof payload.summaryPolyline !== "string") {
+    errors.push("summaryPolyline must be a string");
+  }
+  if (payload.simplification !== undefined) {
+    if (!isPlainObject(payload.simplification)) {
+      errors.push("simplification must be an object");
+    }
+  }
+  if (payload.metrics !== undefined) {
+    if (!isPlainObject(payload.metrics)) {
+      errors.push("metrics must be an object");
+    } else {
+      const { distanceKm, movingTimeS, avgSpeedKmh, paceSecPerKm } = payload.metrics;
+      const ensureNumberOrNull = (value, field) => {
+        if (value !== undefined && value !== null && !isFiniteNumber(value)) {
+          errors.push(`${field} must be a number`);
+        }
+      };
+      ensureNumberOrNull(distanceKm, "metrics.distanceKm");
+      ensureNumberOrNull(movingTimeS, "metrics.movingTimeS");
+      ensureNumberOrNull(avgSpeedKmh, "metrics.avgSpeedKmh");
+      ensureNumberOrNull(paceSecPerKm, "metrics.paceSecPerKm");
+    }
+  }
+  if (payload.conditions !== undefined) {
+    if (!isPlainObject(payload.conditions)) {
+      errors.push("conditions must be an object");
+    } else {
+      const { terrain, mood, weather } = payload.conditions;
+      if (terrain !== undefined && terrain !== null && typeof terrain !== "string") {
+        errors.push("conditions.terrain must be a string");
+      }
+      if (mood !== undefined && mood !== null && typeof mood !== "string") {
+        errors.push("conditions.mood must be a string");
+      }
+      if (weather !== undefined && weather !== null) {
+        if (!isPlainObject(weather)) {
+          errors.push("conditions.weather must be an object");
+        } else {
+          const { condition, temperatureC } = weather;
+          if (condition !== undefined && condition !== null && typeof condition !== "string") {
+            errors.push("conditions.weather.condition must be a string");
+          }
+          if (temperatureC !== undefined && temperatureC !== null && !isFiniteNumber(temperatureC)) {
+            errors.push("conditions.weather.temperatureC must be a number");
+          }
+        }
+      }
+    }
+  }
+  if (payload.storage !== undefined) {
+    if (!isPlainObject(payload.storage)) {
+      errors.push("storage must be an object");
+    } else {
+      const { rawTrackPath, rawTrackUrl, detailedTrackPath, detailedTrackUrl, samples } = payload.storage;
+      const ensureStringOrNull = (value, field) => {
+        if (value !== undefined && value !== null && typeof value !== "string") {
+          errors.push(`${field} must be a string`);
+        }
+      };
+      ensureStringOrNull(rawTrackPath, "storage.rawTrackPath");
+      ensureStringOrNull(rawTrackUrl, "storage.rawTrackUrl");
+      ensureStringOrNull(detailedTrackPath, "storage.detailedTrackPath");
+      ensureStringOrNull(detailedTrackUrl, "storage.detailedTrackUrl");
+      if (samples !== undefined && samples !== null) {
+        if (!isPlainObject(samples)) {
+          errors.push("storage.samples must be an object");
+        } else {
+          const { raw, smoothed, resampled, simplified } = samples;
+          const ensureIntegerOrNull = (value, field) => {
+            if (value !== undefined && value !== null && (!Number.isInteger(value) || value < 0)) {
+              errors.push(`${field} must be a non-negative integer`);
+            }
+          };
+          ensureIntegerOrNull(raw, "storage.samples.raw");
+          ensureIntegerOrNull(smoothed, "storage.samples.smoothed");
+          ensureIntegerOrNull(resampled, "storage.samples.resampled");
+          ensureIntegerOrNull(simplified, "storage.samples.simplified");
+        }
+      }
+    }
   }
   return errors;
 };

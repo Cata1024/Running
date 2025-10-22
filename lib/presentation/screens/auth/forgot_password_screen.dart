@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/glass_container.dart';
-import '../../../core/widgets/glass_button.dart';
+import '../../../core/widgets/aero_container.dart';
+import '../../../core/widgets/aero_button.dart';
 import '../../../core/error/app_error.dart';
 import '../../providers/app_providers.dart';
 
@@ -135,7 +135,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                         const SizedBox(height: 32),
                         
                         // Send button
-                        GlassButton(
+                        AeroButton(
                           onPressed: _isLoading ? null : _handleResetPassword,
                           isLoading: _isLoading,
                           height: 56,
@@ -176,7 +176,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 ),
                 const SizedBox(height: 32),
                 
-                GlassButton(
+                AeroButton(
                   onPressed: () => context.go('/auth/login'),
                   isOutlined: true,
                   height: 56,

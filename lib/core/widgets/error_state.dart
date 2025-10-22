@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
-import 'glass_button.dart';
+import '../design_system/territory_tokens.dart';
+import 'aero_button.dart';
 
 /// Widget para mostrar estados de error
 class ErrorState extends StatelessWidget {
@@ -17,18 +17,19 @@ class ErrorState extends StatelessWidget {
   
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(AppTheme.space48),
+        padding: EdgeInsets.all(TerritoryTokens.space48),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
               Icons.error_outline,
               size: 120,
-              color: AppTheme.errorColor.withValues(alpha: 0.5),
+              color: scheme.error.withValues(alpha: 0.5),
             ),
-            SizedBox(height: AppTheme.space24),
+            SizedBox(height: TerritoryTokens.space24),
             Text(
               title,
               style: const TextStyle(
@@ -37,18 +38,18 @@ class ErrorState extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: AppTheme.space12),
+            SizedBox(height: TerritoryTokens.space12),
             Text(
               message,
               style: TextStyle(
                 fontSize: 16,
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                color: scheme.onSurface.withValues(alpha: 0.6),
               ),
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
-              SizedBox(height: AppTheme.space32),
-              GlassButton(
+              SizedBox(height: TerritoryTokens.space32),
+              AeroButton(
                 onPressed: onRetry,
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,

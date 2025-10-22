@@ -1,8 +1,67 @@
+import 'dart:async';
 import 'dart:ui' as ui;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+class DynamicMap extends StatefulWidget {
+  const DynamicMap({super.key});
+
+  @override
+  State<DynamicMap> createState() => _DynamicMapState();
+}
+
+class _DynamicMapState extends State<DynamicMap> {
+  Set<Marker> _markers = {};
+  MapIconsBundle? _icons;
+
+  static const LatLng _startPos = LatLng(4.7110, -74.0721); // Bogotá
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIcons();
+  }
+
+  Future<void> _loadIcons() async {
+    final icons = await MapIcons.load(context);
+    setState(() {
+      _icons = icons;
+      _markers = {
+        Marker(
+          markerId: const MarkerId('start'),
+          position: _startPos,
+          icon: icons.start,
+        ),
+        Marker(
+          markerId: const MarkerId('runner'),
+          position: LatLng(_startPos.latitude + 0.002, _startPos.longitude),
+          icon: icons.runner,
+        ),
+        Marker(
+          markerId: const MarkerId('finish'),
+          position: LatLng(_startPos.latitude + 0.004, _startPos.longitude),
+          icon: icons.finish,
+        ),
+      };
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _icons == null
+          ? const Center(child: CircularProgressIndicator())
+          : GoogleMap(
+              initialCameraPosition: const CameraPosition(
+                target: _startPos,
+                zoom: 14,
+              ),
+              markers: _markers,
+            ),
+    );
+  }
+}
 
 class MapIconsBundle {
   const MapIconsBundle({
@@ -17,29 +76,35 @@ class MapIconsBundle {
 }
 
 class MapIcons {
-  static Future<MapIconsBundle> load() =>
-      _bundle ??= _createDefaultBundle();
+  static Future<MapIconsBundle> load([BuildContext? context]) async {
+    // 🔄 Resetea el bundle si el tema cambia (por ejemplo modo oscuro)
+    _bundle = null;
+    _bundle ??= _createDefaultBundle(context);
+    return _bundle!;
+  }
 
   static Future<MapIconsBundle>? _bundle;
 
-  static Future<MapIconsBundle> _createDefaultBundle() async {
+  static Future<MapIconsBundle> _createDefaultBundle(BuildContext? context) async {
+    final dynamicColor = context != null
+        ? Theme.of(context).colorScheme.primary
+        : Colors.blueAccent;
+
+    // 🔹 Íconos con tamaño reducido y color dinámico del tema
     final runner = await _renderIcon(
       icon: Icons.directions_run,
-      foreground: const Color(0xFFFB8C00),
-      background: Colors.white,
-      size: 112,
+      color: dynamicColor,
+      size: 32, // 1/4 del tamaño original
     );
     final start = await _renderIcon(
       icon: Icons.play_arrow_rounded,
-      foreground: const Color(0xFF2E7D32),
-      background: Colors.white,
-      size: 108,
+      color: dynamicColor,
+      size: 32,
     );
     final finish = await _renderIcon(
-      icon: Icons.flag,
-      foreground: const Color(0xFFC62828),
-      background: Colors.white,
-      size: 108,
+      icon: Icons.flag_rounded,
+      color: dynamicColor,
+      size: 32,
     );
 
     return MapIconsBundle(
@@ -50,70 +115,54 @@ class MapIcons {
   }
 
   static Future<BitmapDescriptor> custom({
+    required BuildContext context,
     required IconData icon,
-    required Color foreground,
-    Color background = Colors.white,
-    double size = 108,
-  }) =>
-      _renderIcon(
-        icon: icon,
-        foreground: foreground,
-        background: background,
-        size: size,
-      );
+    double size = 32,
+  }) {
+    final color = Theme.of(context).colorScheme.primary;
+    return _renderIcon(icon: icon, color: color, size: size);
+  }
 
   static Future<BitmapDescriptor> _renderIcon({
     required IconData icon,
-    required Color foreground,
-    required Color background,
-    required double size,
+    required Color color,
+    double size = 32,
   }) async {
-    if (kIsWeb) {
-      return BitmapDescriptor.defaultMarker;
-    }
+    if (kIsWeb) return BitmapDescriptor.defaultMarker;
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    final dimension = size.ceil();
-    final radius = dimension / 2.0;
+    final dim = size.ceil().toDouble();
 
-    final backgroundPaint = Paint()
-      ..color = background.withValues(alpha: 0.92)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(radius, radius), radius.toDouble(), backgroundPaint);
-
-    final borderPaint = Paint()
-      ..color = foreground.withValues(alpha: 0.22)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size * 0.08;
-    canvas.drawCircle(
-      Offset(radius, radius),
-      radius - borderPaint.strokeWidth / 2,
-      borderPaint,
-    );
-
+    // 🧩 Dibuja solo el ícono, sin fondo
     final textPainter = TextPainter(textDirection: TextDirection.ltr);
     textPainter.text = TextSpan(
       text: String.fromCharCode(icon.codePoint),
       style: TextStyle(
-        color: foreground,
-        fontSize: size * 0.6,
+        color: color,
+        fontSize: size,
         fontFamily: icon.fontFamily,
         package: icon.fontPackage,
+        shadows: const [
+          Shadow(
+            blurRadius: 2,
+            color: Colors.black26,
+            offset: Offset(0.5, 0.5),
+          ),
+        ],
       ),
     );
     textPainter.layout();
-    final iconOffset = Offset(
-      radius - textPainter.width / 2,
-      radius - textPainter.height / 2,
-    );
-    textPainter.paint(canvas, iconOffset);
 
-    final image = await recorder.endRecording().toImage(dimension, dimension);
+    final offset = Offset(
+      (dim - textPainter.width) / 2,
+      (dim - textPainter.height) / 2,
+    );
+    textPainter.paint(canvas, offset);
+
+    final image = await recorder.endRecording().toImage(dim.toInt(), dim.toInt());
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData == null) {
-      return BitmapDescriptor.defaultMarker;
-    }
+    if (byteData == null) return BitmapDescriptor.defaultMarker;
     return BitmapDescriptor.bytes(byteData.buffer.asUint8List());
   }
 }

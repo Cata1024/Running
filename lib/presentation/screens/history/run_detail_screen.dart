@@ -6,7 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../providers/app_providers.dart';
 import '../../utils/map_style_utils.dart';
-import '../../../core/widgets/glass_container.dart';
+import '../../../core/widgets/aero_container.dart';
 import '../../../core/widgets/loading_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/theme/app_theme.dart';

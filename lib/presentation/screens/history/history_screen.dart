@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/empty_state.dart';
-import '../../../core/widgets/glass_container.dart';
+import '../../../core/widgets/aero_container.dart';
 import '../../../core/widgets/mini_map.dart';
 import '../../providers/app_providers.dart';
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import 'glass_container.dart';
+import 'aero_container.dart';
 
 /// Widget para mostrar estados de carga
 class LoadingState extends StatelessWidget {
