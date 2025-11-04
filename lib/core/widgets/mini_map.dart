@@ -7,6 +7,8 @@ class MiniMap extends StatelessWidget {
   final double width;
   final double height;
   final double borderRadius;
+  final bool enableZoom;
+  final bool showRoutePolyline;
 
   const MiniMap({
     super.key,
@@ -14,6 +16,8 @@ class MiniMap extends StatelessWidget {
     this.width = 80,
     this.height = 80,
     this.borderRadius = 12,
+    this.enableZoom = false,
+    this.showRoutePolyline = true,
   });
 
   @override
@@ -82,14 +86,16 @@ class MiniMap extends StatelessWidget {
             target: LatLng(centerLat, centerLng),
             zoom: 14,
           ),
-          polylines: {
-            Polyline(
-              polylineId: const PolylineId('route'),
-              points: points,
-              color: Colors.blue,
-              width: 3,
-            ),
-          },
+          polylines: showRoutePolyline
+              ? {
+                  Polyline(
+                    polylineId: const PolylineId('route'),
+                    points: points,
+                    color: Colors.blue,
+                    width: 3,
+                  ),
+                }
+              : const <Polyline>{},
           markers: {
             Marker(
               markerId: const MarkerId('start'),
@@ -107,10 +113,10 @@ class MiniMap extends StatelessWidget {
             ),
           },
           zoomControlsEnabled: false,
-          scrollGesturesEnabled: false,
-          zoomGesturesEnabled: false,
-          rotateGesturesEnabled: false,
-          tiltGesturesEnabled: false,
+          scrollGesturesEnabled: enableZoom,
+          zoomGesturesEnabled: enableZoom,
+          rotateGesturesEnabled: enableZoom,
+          tiltGesturesEnabled: enableZoom,
           myLocationButtonEnabled: false,
           mapToolbarEnabled: false,
         ),

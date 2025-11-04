@@ -23,7 +23,7 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(TerritoryTokens.space48),
+        padding: const EdgeInsets.all(TerritoryTokens.space48),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -32,7 +32,7 @@ class EmptyState extends StatelessWidget {
               size: 120,
               color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
             ),
-            SizedBox(height: TerritoryTokens.space24),
+            const SizedBox(height: TerritoryTokens.space24),
             Text(
               title,
               style: const TextStyle(
@@ -41,7 +41,7 @@ class EmptyState extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: TerritoryTokens.space12),
+            const SizedBox(height: TerritoryTokens.space12),
             Text(
               message,
               style: TextStyle(
@@ -51,7 +51,7 @@ class EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (actionLabel != null && onAction != null) ...[
-              SizedBox(height: TerritoryTokens.space32),
+              const SizedBox(height: TerritoryTokens.space32),
               AeroButton(
                 onPressed: onAction,
                 child: Text(actionLabel!),

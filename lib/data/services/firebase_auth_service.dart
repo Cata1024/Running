@@ -3,6 +3,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/error/app_error.dart';
+import '../../domain/entities/registration_data.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'api_service.dart';
 
@@ -57,6 +58,9 @@ class FirebaseAuthService {
   Future<User> signUpWithEmail({
     required String email,
     required String password,
+    String? displayName,
+    String? goalType,
+    double? weeklyDistanceGoal,
   }) async {
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -74,7 +78,12 @@ class FirebaseAuthService {
       // Enviar email de verificación
       await credential.user!.sendEmailVerification();
 
-      await _ensureUserDocument(credential.user!);
+      await _ensureUserDocument(
+        credential.user!,
+        displayName: displayName,
+        goalType: goalType,
+        weeklyDistanceGoal: weeklyDistanceGoal,
+      );
 
       return credential.user!;
     } on FirebaseAuthException catch (e) {
@@ -87,8 +96,105 @@ class FirebaseAuthService {
     }
   }
 
+  /// Registrar con datos completos del onboarding
+  Future<User> registerWithCompleteData(RegistrationData data) async {
+    try {
+      User? user;
+      
+      // Crear cuenta según el método de autenticación
+      switch (data.authMethod) {
+        case AuthMethod.emailPassword:
+          if (data.email == null || data.password == null) {
+            throw AppError(
+              message: 'Email y contraseña requeridos',
+              code: 'invalid-data',
+            );
+          }
+          final credential = await _auth.createUserWithEmailAndPassword(
+            email: data.email!,
+            password: data.password!,
+          );
+          user = credential.user;
+          
+          // Enviar email de verificación
+          if (user != null) {
+            await user.sendEmailVerification();
+          }
+          break;
+          
+        case AuthMethod.google:
+          // Iniciar sesión con Google
+          if (kIsWeb) {
+            final cred = await _auth.signInWithPopup(GoogleAuthProvider());
+            user = cred.user;
+          } else {
+            final google = GoogleSignIn(scopes: const ['email']);
+            final account = await google.signIn();
+            if (account == null) {
+              throw AppError(message: 'Inicio cancelado', code: 'google-signin-cancelled');
+            }
+            final tokens = await account.authentication;
+            final credential = GoogleAuthProvider.credential(
+              idToken: tokens.idToken,
+              accessToken: tokens.accessToken,
+            );
+            final cred = await _auth.signInWithCredential(credential);
+            user = cred.user;
+          }
+          break;
+          
+        case AuthMethod.apple:
+        case AuthMethod.facebook:
+          throw AppError(
+            message: '${data.authMethod.displayName} no está implementado aún',
+            code: 'not-implemented',
+          );
+      }
+      
+      if (user == null) {
+        throw AppError(
+          message: 'No se pudo crear la cuenta',
+          code: 'signup-failed',
+        );
+      }
+      
+      // Crear perfil completo con todos los datos del onboarding
+      await _createCompleteUserProfile(user, data);
+      
+      return user;
+    } on FirebaseAuthException catch (e) {
+      throw _handleAuthException(e);
+    } catch (e) {
+      if (e is AppError) rethrow;
+      throw AppError(
+        message: 'Error inesperado al crear cuenta',
+        code: 'unexpected-error',
+      );
+    }
+  }
+  
+  /// Crear perfil completo con datos del onboarding
+  Future<void> _createCompleteUserProfile(User user, RegistrationData data) async {
+    try {
+      final profileData = data.toProfileData();
+      profileData['email'] = user.email;
+      profileData['photoUrl'] = user.photoURL;
+      
+      await _api.upsertUserProfile(user.uid, profileData);
+    } catch (e) {
+      // Log error pero no bloquear el registro
+      debugPrint('Error creating complete profile: $e');
+      // Intentar crear perfil básico como fallback
+      await _ensureUserDocument(user);
+    }
+  }
+
   /// Iniciar sesión con Google
-  Future<User> signInWithGoogle() async {
+  Future<User> signInWithGoogle({
+    String? displayName,
+    String? goalType,
+    double? weeklyDistanceGoal,
+  }) async {
     try {
       if (kIsWeb) {
         final cred = await _auth.signInWithPopup(GoogleAuthProvider());
@@ -96,11 +202,20 @@ class FirebaseAuthService {
         if (user == null) {
           throw AppError(message: 'No se pudo iniciar sesión con Google', code: 'google-signin-failed');
         }
-        await _ensureUserDocument(user);
+        await _ensureUserDocument(
+          user,
+          displayName: displayName,
+          goalType: goalType,
+          weeklyDistanceGoal: weeklyDistanceGoal,
+        );
         return user;
       } else {
         // Flujo nativo con google_sign_in v6 (Android/iOS)
-        final google = GoogleSignIn(scopes: const ['email']);
+        // IMPORTANTE: serverClientId es el Web Client ID de Firebase Console
+        final google = GoogleSignIn(
+          scopes: const ['email'],
+          serverClientId: '28475506464-fak9o969p6igi6mp1l8et45ru6usrm1p.apps.googleusercontent.com',
+        );
         final account = await google.signIn();
         if (account == null) {
           throw AppError(message: 'Inicio cancelado', code: 'google-signin-cancelled');
@@ -115,7 +230,15 @@ class FirebaseAuthService {
         if (user == null) {
           throw AppError(message: 'No se pudo iniciar sesión con Google', code: 'google-signin-failed');
         }
-        await _ensureUserDocument(user);
+        
+        // Asegurar que el documento de usuario exista, especialmente para logins recurrentes
+        await _ensureUserDocument(
+          user,
+          displayName: displayName,
+          goalType: goalType,
+          weeklyDistanceGoal: weeklyDistanceGoal,
+        );
+        
         return user;
       }
     } on FirebaseAuthException catch (e) {
@@ -373,11 +496,16 @@ class FirebaseAuthService {
   }
   
   /// Asegura que exista el documento de usuario en Firestore
-  Future<void> _ensureUserDocument(User user) async {
+  Future<void> _ensureUserDocument(
+    User user, {
+    String? displayName,
+    String? goalType,
+    double? weeklyDistanceGoal,
+  }) async {
     try {
       await _api.upsertUserProfile(user.uid, {
         'email': user.email,
-        'displayName': user.displayName,
+        'displayName': displayName ?? user.displayName ?? 'Runner',
         'photoUrl': user.photoURL,
         'preferredUnits': 'metric',
         'level': 1,
@@ -392,6 +520,8 @@ class FirebaseAuthService {
         'heightCm': null,
         'weightKg': null,
         'goalDescription': null,
+        if (goalType != null) 'goalType': goalType,
+        if (weeklyDistanceGoal != null) 'weeklyDistanceGoal': weeklyDistanceGoal,
       });
     } catch (_) {
       // No bloquear el login por fallo no crítico de perfil

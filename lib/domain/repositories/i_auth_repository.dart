@@ -1,5 +1,6 @@
 import 'package:dartz/dartz.dart';
 import '../entities/app_user.dart';
+import '../entities/registration_data.dart';
 import '../../core/error/failures.dart';
 
 /// Contrato para el repositorio de autenticación
@@ -16,11 +17,17 @@ abstract class IAuthRepository {
     required String password,
   });
   
-  /// Registrar nuevo usuario con email y contraseña
+  /// Registrar nuevo usuario con email y contraseña (legacy - usar registerWithCompleteData)
+  @Deprecated('Use registerWithCompleteData instead')
   Future<Either<AuthFailure, AppUser>> signUpWithEmail({
     required String email,
     required String password,
   });
+  
+  /// Registrar nuevo usuario con datos completos del onboarding
+  Future<Either<AuthFailure, AppUser>> registerWithCompleteData(
+    RegistrationData data,
+  );
   
   /// Iniciar sesión con Google
   Future<Either<AuthFailure, AppUser>> signInWithGoogle();

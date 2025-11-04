@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/app_user.dart';
+import '../../domain/entities/registration_data.dart';
 import '../../domain/repositories/i_auth_repository.dart';
 import '../../core/error/failures.dart';
 import 'package:dartz/dartz.dart';
@@ -118,6 +119,90 @@ class AuthRepository implements IAuthRepository {
     } on FirebaseAuthException catch (e) {
       return Left(_handleAuthException(e));
     } catch (e) {
+      return Left(AuthFailure.serverError());
+    }
+  }
+
+  @override
+  Future<Either<AuthFailure, AppUser>> registerWithCompleteData(
+    RegistrationData data,
+  ) async {
+    try {
+      // Validar datos antes de proceder
+      if (!data.isValid) {
+        return Left(AuthFailure.invalidData());
+      }
+
+      UserCredential? credential;
+      
+      // Autenticar según el método elegido
+      switch (data.authMethod) {
+        case AuthMethod.emailPassword:
+          if (data.email == null || data.password == null) {
+            return Left(AuthFailure.invalidData());
+          }
+          credential = await _auth.createUserWithEmailAndPassword(
+            email: data.email!,
+            password: data.password!,
+          );
+          
+          // Enviar email de verificación
+          if (credential.user != null) {
+            await credential.user!.sendEmailVerification();
+          }
+          break;
+          
+        case AuthMethod.google:
+          if (kIsWeb) {
+            final googleProvider = GoogleAuthProvider()
+              ..addScope('email')
+              ..setCustomParameters({'prompt': 'select_account'});
+            credential = await _auth.signInWithPopup(googleProvider);
+          } else {
+            final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+            if (googleUser == null) {
+              return Left(AuthFailure.cancelledByUser());
+            }
+            final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+            final authCredential = GoogleAuthProvider.credential(
+              accessToken: googleAuth.accessToken,
+              idToken: googleAuth.idToken,
+            );
+            credential = await _auth.signInWithCredential(authCredential);
+          }
+          break;
+          
+        case AuthMethod.apple:
+        case AuthMethod.facebook:
+          return Left(AuthFailure.notImplemented());
+      }
+
+      if (credential.user == null) {
+        return Left(AuthFailure.serverError());
+      }
+
+      final firebaseUser = credential.user!;
+      
+      // Crear AppUser para retornar
+      final appUser = AppUser(
+        id: firebaseUser.uid,
+        email: firebaseUser.email ?? data.email ?? '',
+        displayName: data.displayName,
+        photoUrl: firebaseUser.photoURL,
+        isEmailVerified: firebaseUser.emailVerified,
+        providers: firebaseUser.providerData
+            .map((info) => info.providerId)
+            .toList(),
+      );
+
+      // Nota: El perfil completo se crea en FirebaseAuthService.registerWithCompleteData
+      // que es llamado desde el provider/use case
+      
+      return Right(appUser);
+    } on FirebaseAuthException catch (e) {
+      return Left(_handleAuthException(e));
+    } catch (e) {
+      debugPrint('Error in registerWithCompleteData: $e');
       return Left(AuthFailure.serverError());
     }
   }

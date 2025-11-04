@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/aero_container.dart';
 import '../../../core/widgets/aero_button.dart';
+import '../../../core/widgets/aero_surface.dart';
 import '../../../core/error/app_error.dart';
 import '../../providers/app_providers.dart';
 
@@ -76,15 +77,25 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               
               if (!_emailSent) ...[
                 // Logo
-                GlassContainer(
+                AeroSurface(
                   width: 80,
                   height: 80,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusCircular),
-                  gradient: AppTheme.accentGradient,
-                  child: const Icon(
-                    Icons.lock_reset,
-                    size: 40,
-                    color: Colors.white,
+                  level: AeroLevel.strong,
+                  borderRadius: BorderRadius.circular(TerritoryTokens.radiusXLarge),
+                  padding: EdgeInsets.zero,
+                  enableBlur: true,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.accentGradient,
+                      borderRadius: BorderRadius.circular(TerritoryTokens.radiusXLarge),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.lock_reset,
+                        size: 40,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -105,8 +116,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 const SizedBox(height: 32),
                 
                 // Form
-                GlassCard(
+                AeroSurface(
+                  level: AeroLevel.medium,
                   padding: AppTheme.paddingLarge,
+                  borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
                   child: Form(
                     key: _formKey,
                     child: Column(
@@ -147,15 +160,23 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                 ),
               ] else ...[
                 // Success state
-                GlassContainer(
+                AeroSurface(
                   width: 100,
                   height: 100,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusCircular),
-                  backgroundColor: AppTheme.successColor.withValues(alpha: 0.1),
-                  child: Icon(
-                    Icons.check_circle_outline,
-                    size: 60,
-                    color: AppTheme.successColor,
+                  level: AeroLevel.ghost,
+                  borderRadius: BorderRadius.circular(TerritoryTokens.radiusXLarge),
+                  enableBlur: false,
+                  padding: EdgeInsets.zero,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppTheme.successColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(TerritoryTokens.radiusXLarge),
+                    ),
+                    child: Icon(
+                      Icons.check_circle_outline,
+                      size: 60,
+                      color: AppTheme.successColor,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),

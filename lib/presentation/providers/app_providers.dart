@@ -6,6 +6,8 @@ import '../../data/services/firebase_auth_service.dart';
 import '../../core/map_icons.dart';
 import '../../domain/services/storage_service.dart';
 
+export 'settings_provider.dart' show settingsProvider;
+
 /// Providers básicos que funcionan con Riverpod 3.0+
 
 // Enums
@@ -81,6 +83,8 @@ class HistoryFilterNotifier extends Notifier<HistoryFilter> {
       maxKm: maxKm,
     );
   }
+
+  void reset() => state = const HistoryFilter();
 }
 
 final historyFilterProvider = NotifierProvider<HistoryFilterNotifier, HistoryFilter>(HistoryFilterNotifier.new);
@@ -178,7 +182,10 @@ final runStateProvider = NotifierProvider<RunStateNotifier, RunState>(
   RunStateNotifier.new,
 );
 
+/// Provider para iconos del mapa (cacheado permanentemente)
 final mapIconsProvider = FutureProvider<MapIconsBundle>((ref) async {
+  // Los iconos son estáticos, mantenerlos en cache permanentemente
+  ref.keepAlive();
   return MapIcons.load();
 });
 
@@ -192,6 +199,25 @@ final userProfileDocProvider = FutureProvider<Map<String, dynamic>?>((ref) async
   final api = ref.watch(apiServiceProvider);
   return api.fetchUserProfile(user.uid);
 });
+
+/// Verifica si el usuario tiene un perfil completo
+final hasCompleteProfileProvider = Provider<bool>((ref) {
+  final user = ref.watch(currentFirebaseUserProvider);
+  if (user == null) return false;
+
+  final profileAsync = ref.watch(userProfileDocProvider);
+  return profileAsync.when(
+    data: (profile) {
+      if (profile == null || profile.isEmpty) return false;
+      // Consideramos completo si tiene un nombre de usuario y una fecha de nacimiento
+      return (profile['displayName'] as String? ?? '').isNotEmpty && 
+             (profile['birthDate'] as String? ?? '').isNotEmpty;
+    },
+    loading: () => false, // Devuelve false mientras carga para evitar falsos positivos
+    error: (_, __) => false,
+  );
+});
+
 
 /// Territorio del usuario (Firestore: territory/{uid})
 final userTerritoryDocProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
@@ -210,7 +236,11 @@ final userRunsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async 
 });
 
 /// Documento de run por id (Firestore: runs/{id})
+/// Con keepAlive para mantener en cache los runs ya cargados
 final runDocProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, id) async {
+  // Mantener en cache para evitar recargas
+  ref.keepAlive();
+  
   final api = ref.watch(apiServiceProvider);
   return api.fetchRun(id);
 });
@@ -224,4 +254,19 @@ class MapTypeNotifier extends Notifier<MapType> {
 
 final mapTypeProvider = NotifierProvider<MapTypeNotifier, MapType>(
   MapTypeNotifier.new,
+);
+
+class NavBarHeightNotifier extends Notifier<double> {
+  @override
+  double build() => 0;
+
+  void setHeight(double height) {
+    if (height != state) {
+      state = height;
+    }
+  }
+}
+
+final navBarHeightProvider = NotifierProvider<NavBarHeightNotifier, double>(
+  NavBarHeightNotifier.new,
 );

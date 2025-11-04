@@ -14,6 +14,7 @@ class AeroButton extends StatefulWidget {
   final Color? backgroundColor;
   final bool isLoading;
   final bool isOutlined;
+  final String? semanticLabel;
 
   const AeroButton({
     super.key,
@@ -27,6 +28,7 @@ class AeroButton extends StatefulWidget {
     this.backgroundColor,
     this.isLoading = false,
     this.isOutlined = false,
+    this.semanticLabel,
   });
 
   @override
@@ -103,12 +105,16 @@ class _AeroButtonState extends State<AeroButton>
             ? scheme.surfaceContainerHigh
             : scheme.primary);
 
-    return GestureDetector(
-      onTapDown: disabled ? null : _handleTapDown,
-      onTapUp: disabled ? null : _handleTapUp,
-      onTapCancel: disabled ? null : _handleTapCancel,
-      onTap: disabled ? null : widget.onPressed,
-      child: AnimatedBuilder(
+    return Semantics(
+      button: true,
+      enabled: !disabled,
+      label: widget.semanticLabel,
+      child: GestureDetector(
+        onTapDown: disabled ? null : _handleTapDown,
+        onTapUp: disabled ? null : _handleTapUp,
+        onTapCancel: disabled ? null : _handleTapCancel,
+        onTap: disabled ? null : widget.onPressed,
+        child: AnimatedBuilder(
         animation: _scaleAnimation,
         builder: (context, child) {
           return Transform.scale(
@@ -168,6 +174,7 @@ class _AeroButtonState extends State<AeroButton>
             ),
           );
         },
+        ),
       ),
     );
   }
@@ -181,6 +188,7 @@ class AeroIconButton extends StatefulWidget {
   final Color? iconColor;
   final Color? backgroundColor;
   final bool isLoading;
+  final String? semanticLabel;
 
   const AeroIconButton({
     super.key,
@@ -190,6 +198,7 @@ class AeroIconButton extends StatefulWidget {
     this.iconColor,
     this.backgroundColor,
     this.isLoading = false,
+    this.semanticLabel,
   });
 
   @override
@@ -228,7 +237,11 @@ class _AeroIconButtonState extends State<AeroIconButton>
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final bool disabled = widget.onPressed == null || widget.isLoading;
-    return GestureDetector(
+    return Semantics(
+      button: true,
+      enabled: !disabled,
+      label: widget.semanticLabel,
+      child: GestureDetector(
       onTapDown: disabled
           ? null
           : (_) {
@@ -287,6 +300,7 @@ class _AeroIconButtonState extends State<AeroIconButton>
             ),
           );
         },
+        ),
       ),
     );
   }

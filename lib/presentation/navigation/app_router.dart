@@ -1,84 +1,213 @@
 import 'dart:ui';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../screens/auth/login_screen.dart';
-import '../screens/auth/register_screen.dart';
+import '../screens/auth/welcome_screen.dart';
+import '../screens/auth/auth_method_selection_screen.dart';
+import '../screens/auth/email_registration_screen.dart';
+import '../screens/auth/streamlined_onboarding_screen.dart';
+import '../screens/auth/profile_summary_screen.dart';
+import '../screens/auth/login_improved_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/profile/complete_profile_screen.dart';
+import '../screens/profile/edit_profile_screen.dart';
 import '../screens/run/run_screen.dart';
 import '../screens/history/history_screen.dart';
 import '../screens/history/run_detail_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/achievements/achievements_screen.dart';
 import '../providers/app_providers.dart';
 import '../../core/widgets/aero_nav_bar.dart';
 import '../../core/design_system/territory_tokens.dart';
+import 'custom_page_transition.dart';
+
+/// Notificador para GoRouter que reacciona a cambios de auth y perfil.
+class RedirectNotifier extends ChangeNotifier {
+  final Ref _ref;
+
+  RedirectNotifier(this._ref) {
+    // Escuchar cambios en el estado de autenticación y perfil
+    _ref.listen(
+      authStateStreamProvider,
+      (_, __) => notifyListeners(),
+    );
+    _ref.listen(
+      hasCompleteProfileProvider,
+      (_, __) => notifyListeners(),
+    );
+  }
+}
 
 /// Router principal de la aplicación
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateStreamProvider);
-  
+  // El notificador que escuchará los cambios para refrescar el router
+  final redirectNotifier = RedirectNotifier(ref);
+
   return GoRouter(
     initialLocation: '/',
-    debugLogDiagnostics: false,
+    debugLogDiagnostics: true, // Habilitar para depuración
+    refreshListenable: redirectNotifier,
     redirect: (context, state) {
-      final isLoggedIn = authState.when(
-        data: (user) => user != null,
-        loading: () => false,
-        error: (_, __) => false,
-      );
+      final isLoggedIn = ref.read(currentFirebaseUserProvider) != null;
+      final hasProfile = ref.read(hasCompleteProfileProvider);
+
+      final isAuthRoute = state.matchedLocation.startsWith('/auth');
+      final isPublicRoute = state.matchedLocation == '/welcome';
+
+      if (!isLoggedIn) {
+        // Si no está logueado, solo puede acceder a las rutas públicas/auth
+        return isPublicRoute || isAuthRoute ? null : '/welcome';
+      }
+
+      // --- Usuario Logueado ---
+      final isOnboardingRoute = state.matchedLocation.startsWith('/auth/onboarding');
+
+      if (!hasProfile) {
+        // Si no tiene perfil, forzar onboarding
+        return isOnboardingRoute ? null : '/auth/onboarding';
+      }
       
-      final isLoggingIn = state.matchedLocation.startsWith('/auth');
-      final isRoot = state.matchedLocation == '/';
-
-      // Si está en la raíz, redirigir según estado de auth
-      if (isRoot) {
-        return isLoggedIn ? '/map' : '/auth/login';
-      }
-
-      // Si no está logueado y no está en auth, redirigir a login
-      if (!isLoggedIn && !isLoggingIn) {
-        return '/auth/login';
-      }
-
-      // Si está logueado y está en auth, redirigir a home
-      if (isLoggedIn && isLoggingIn) {
+      // Si tiene perfil y está en una ruta de auth/pública, redirigir al mapa
+      if (isAuthRoute || isPublicRoute) {
         return '/map';
       }
 
+      // En cualquier otro caso, permitir el acceso
       return null;
     },
     routes: [
-      // Ruta raíz - redirige automáticamente
-      GoRoute(
-        path: '/',
-        redirect: (context, state) => '/auth/login',
-      ),
-      
       GoRoute(
         path: '/splash',
         name: 'splash',
         builder: (context, state) => const SplashScreen(),
       ),
       
+      // Welcome screen (sin auth requerido)
+      GoRoute(
+        path: '/welcome',
+        name: 'welcome',
+        pageBuilder: (context, state) => CustomPageTransition(
+          key: state.pageKey,
+          child: const WelcomeScreen(),
+          type: PageTransitionType.fadeScale,
+          duration: const Duration(milliseconds: 400),
+        ).build(context, state),
+      ),
+      
       // Rutas de autenticación
       GoRoute(
         path: '/auth',
         name: 'auth',
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) => const LoginImprovedScreen(),
         routes: [
+          // Selección de método de autenticación (NUEVO)
+          GoRoute(
+            path: 'method-selection',
+            name: 'method-selection',
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const AuthMethodSelectionScreen(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.1),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+            ),
+          ),
+          
+          // Email + Password registration (NUEVO)
+          GoRoute(
+            path: 'email-registration',
+            name: 'email-registration',
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const EmailRegistrationScreen(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.1, 0),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+            ),
+          ),
+          
+          // Onboarding simplificado (4 pasos - OPTIMIZADO)
+          GoRoute(
+            path: 'onboarding',
+            name: 'onboarding',
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const StreamlinedOnboardingScreen(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: child,
+                );
+              },
+            ),
+          ),
+          
+          // Resumen del perfil (NUEVO)
+          GoRoute(
+            path: 'profile-summary',
+            name: 'profile-summary',
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const ProfileSummaryScreen(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0.1, 0),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+            ),
+          ),
+          
+          // Login
           GoRoute(
             path: 'login',
             name: 'login',
-            builder: (context, state) => const LoginScreen(),
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const LoginImprovedScreen(),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: Tween<Offset>(
+                      begin: const Offset(0, 0.1),
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  ),
+                );
+              },
+            ),
           ),
-          GoRoute(
-            path: 'register',
-            name: 'register',
-            builder: (context, state) => const RegisterScreen(),
-          ),
+          
+          // Forgot password
           GoRoute(
             path: 'forgot-password',
             name: 'forgot-password',
@@ -95,7 +224,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/map',
             name: 'map',
-            builder: (context, state) => const RunScreen(),
+            builder: (context, state) => const SizedBox.shrink(),
           ),
           GoRoute(
             path: '/history',
@@ -105,12 +234,20 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'detail',
                 name: 'run-detail',
-                builder: (context, state) {
+                pageBuilder: (context, state) {
                   final id = state.extra as String?;
                   if (id == null) {
-                    return ErrorScreen(error: Exception('Run id missing'));
+                    return MaterialPage(
+                      key: state.pageKey,
+                      child: ErrorScreen(error: Exception('Run id missing')),
+                    );
                   }
-                  return RunDetailScreen(runId: id);
+                  return CustomPageTransition(
+                    key: state.pageKey,
+                    child: RunDetailScreen(runId: id),
+                    type: PageTransitionType.sharedAxis,
+                    duration: const Duration(milliseconds: 350),
+                  ).build(context, state);
                 },
               ),
             ],
@@ -123,7 +260,22 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: 'complete',
                 name: 'complete-profile',
-                builder: (context, state) => const CompleteProfileScreen(),
+                pageBuilder: (context, state) => CustomPageTransition(
+                  key: state.pageKey,
+                  child: const CompleteProfileScreen(),
+                  type: PageTransitionType.slideUp,
+                  duration: const Duration(milliseconds: 350),
+                ).build(context, state),
+              ),
+              GoRoute(
+                path: 'edit',
+                name: 'edit-profile',
+                pageBuilder: (context, state) => CustomPageTransition(
+                  key: state.pageKey,
+                  child: const EditProfileScreen(),
+                  type: PageTransitionType.slideLeft,
+                  duration: const Duration(milliseconds: 300),
+                ).build(context, state),
               ),
             ],
           ),
@@ -133,7 +285,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         name: 'settings',
-        builder: (context, state) => const SettingsScreen(),
+        pageBuilder: (context, state) => CustomPageTransition(
+          key: state.pageKey,
+          child: const SettingsScreen(),
+          type: PageTransitionType.slideLeft,
+          duration: const Duration(milliseconds: 300),
+        ).build(context, state),
+      ),
+      // Logros fuera del shell; se accede desde Perfil
+      GoRoute(
+        path: '/achievements',
+        name: 'achievements',
+        pageBuilder: (context, state) => CustomPageTransition(
+          key: state.pageKey,
+          child: const AchievementsScreen(),
+          type: PageTransitionType.slideUp,
+          duration: const Duration(milliseconds: 350),
+        ).build(context, state),
       ),
     ],
     errorPageBuilder: (context, state) => MaterialPage(
@@ -163,7 +331,30 @@ class _AppShellState extends ConsumerState<AppShell> {
     AeroNavBarItem(icon: Icons.person_outline, label: 'Perfil'),
   ];
 
-  late final Widget _persistentMap = const RunScreen();
+  // ✅ Estado local para navbar (sin providers)
+  bool _navBarVisible = true;
+  
+  // ✅ Callback para que RunScreen notifique cambios SIN provider
+  void _onRunStateChanged(bool isRunning, bool isPaused) {
+    // Ejecutar después del frame actual para evitar "modify during build"
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      
+      final currentPath = GoRouterState.of(context).matchedLocation;
+      final bool onRunScreen = currentPath.startsWith('/map');
+      final bool shouldBeVisible = !(onRunScreen && isRunning && !isPaused);
+      
+      if (_navBarVisible != shouldBeVisible) {
+        setState(() {
+          _navBarVisible = shouldBeVisible;
+        });
+      }
+    });
+  }
+  
+  late final Widget _persistentMap = RunScreen(
+    onRunStateChanged: _onRunStateChanged,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -176,10 +367,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       currentIndex = 2;
     }
 
-    final runState = ref.watch(runStateProvider);
     final bool onRunScreen = currentPath.startsWith('/map');
-    final bool navVisible =
-        !(onRunScreen && runState.isRunning && !runState.isPaused);
 
     return Scaffold(
       extendBody: true,
@@ -190,10 +378,9 @@ class _AppShellState extends ConsumerState<AppShell> {
             Positioned.fill(
               child: _BlurredOverlay(child: widget.child),
             ),
-          AeroNavBar(
-            items: _navItems,
+          _MeasuredNavBar(
+            visible: _navBarVisible,
             currentIndex: currentIndex,
-            visible: navVisible,
             onItemSelected: (index) {
               switch (index) {
                 case 0:
@@ -210,6 +397,53 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _MeasuredNavBar extends ConsumerStatefulWidget {
+  final bool visible;
+  final int currentIndex;
+  final ValueChanged<int> onItemSelected;
+
+  const _MeasuredNavBar({
+    required this.visible,
+    required this.currentIndex,
+    required this.onItemSelected,
+  });
+
+  @override
+  ConsumerState<_MeasuredNavBar> createState() => _MeasuredNavBarState();
+}
+
+class _MeasuredNavBarState extends ConsumerState<_MeasuredNavBar> {
+  @override
+  void initState() {
+    super.initState();
+    _notifyNavBarHeight();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MeasuredNavBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _notifyNavBarHeight();
+  }
+
+  void _notifyNavBarHeight() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final height = widget.visible ? AeroNavBar.preferredHeight : 0.0;
+      ref.read(navBarHeightProvider.notifier).setHeight(height);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AeroNavBar(
+      items: _AppShellState._navItems,
+      currentIndex: widget.currentIndex,
+      visible: widget.visible,
+      onItemSelected: widget.onItemSelected,
     );
   }
 }
@@ -329,3 +563,18 @@ class ErrorScreen extends StatelessWidget {
 }
 
 /// Stream para refrescar el router con cambios de autenticación
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    _subscription = stream.asBroadcastStream().listen((_) {
+      notifyListeners();
+    });
+  }
+
+  late final StreamSubscription<dynamic> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/widgets/aero_container.dart';
+import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/widgets/aero_button.dart';
+import '../../../core/widgets/aero_surface.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
 
@@ -16,10 +17,10 @@ class CompleteProfileScreen extends ConsumerStatefulWidget {
 class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _ageController = TextEditingController();
   final _weightController = TextEditingController();
   final _heightController = TextEditingController();
   
+  DateTime? _birthDate;
   String? _selectedGender;
   String? _selectedExperience;
   bool _isLoading = false;
@@ -28,7 +29,6 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _ageController.dispose();
     _weightController.dispose();
     _heightController.dispose();
     super.dispose();
@@ -45,18 +45,8 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
       }
 
       final name = _nameController.text.trim();
-      final age = int.tryParse(_ageController.text.trim());
       final weight = double.tryParse(_weightController.text.trim());
       final height = int.tryParse(_heightController.text.trim());
-
-      DateTime? birthDate;
-      if (age != null) {
-        final now = DateTime.now();
-        final tentative = DateTime(now.year - age, now.month, now.day);
-        birthDate = tentative.isAfter(now)
-            ? DateTime(now.year - age - 1, now.month, now.day)
-            : tentative;
-      }
 
       final experiencePoints = _experienceToPoints(_selectedExperience);
 
@@ -69,8 +59,8 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
         'experienceLevel': _selectedExperience,
         'updatedAt': DateTime.now().toIso8601String(),
       };
-      if (birthDate != null) {
-        payload['birthDate'] = birthDate.toIso8601String();
+      if (_birthDate != null) {
+        payload['birthDate'] = _birthDate!.toIso8601String();
       }
       payload.removeWhere((key, value) => value == null);
 
@@ -113,15 +103,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
       _nameController.text = displayName;
     }
     if (birthDate != null) {
-      final now = DateTime.now();
-      var age = now.year - birthDate.year;
-      final hasHadBirthday =
-          DateTime(now.year, birthDate.month, birthDate.day).isBefore(now) ||
-              DateTime(now.year, birthDate.month, birthDate.day).isAtSameMomentAs(now);
-      if (!hasHadBirthday) {
-        age -= 1;
-      }
-      _ageController.text = age.toString();
+      _birthDate = birthDate;
     }
     if (weight != null) {
       _weightController.text = _formatNumber(weight);
@@ -182,9 +164,41 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
     return null;
   }
 
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  Future<void> _selectBirthDate(BuildContext context) async {
+    final now = DateTime.now();
+    final initialDate = _birthDate ?? DateTime(now.year - 25, now.month, now.day);
+    
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(now.year - 100),
+      lastDate: DateTime(now.year - 13), // Mínimo 13 años
+      helpText: 'Selecciona tu fecha de nacimiento',
+      cancelText: 'Cancelar',
+      confirmText: 'Aceptar',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null && mounted) {
+      setState(() {
+        _birthDate = picked;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final navBarHeight = ref.watch(navBarHeightProvider);
     final profileAsync = ref.watch(userProfileDocProvider);
 
     profileAsync.when(
@@ -215,13 +229,18 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: AppTheme.paddingLarge,
+        padding: AppTheme.paddingLarge.copyWith(
+          bottom: AppTheme.paddingLarge.bottom + (navBarHeight - TerritoryTokens.space16).clamp(0, double.infinity),
+        ),
         child: Form(
           key: _formKey,
           child: Column(
             children: [
               // Header
-              GlassContainer(
+              AeroSurface(
+                level: AeroLevel.medium,
+                borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
+                padding: const EdgeInsets.all(TerritoryTokens.space24),
                 child: Column(
                   children: [
                     Icon(
@@ -229,7 +248,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                       size: 64,
                       color: theme.colorScheme.primary,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: TerritoryTokens.space16),
                     Text(
                       '¡Bienvenido a Territory Run!',
                       style: theme.textTheme.headlineSmall?.copyWith(
@@ -237,7 +256,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: TerritoryTokens.space8),
                     Text(
                       'Completa tu perfil para personalizar tu experiencia',
                       style: theme.textTheme.bodyLarge,
@@ -246,10 +265,13 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: TerritoryTokens.space24),
               
               // Form Fields
-              GlassContainer(
+              AeroSurface(
+                level: AeroLevel.medium,
+                borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
+                padding: const EdgeInsets.all(TerritoryTokens.space24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -259,7 +281,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: TerritoryTokens.space24),
                     
                     // Name
                     TextFormField(
@@ -277,34 +299,38 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: TerritoryTokens.space16),
                     
-                    // Age and Gender Row
+                    // Birthdate and Gender Row
                     Row(
                       children: [
                         Expanded(
-                          child: TextFormField(
-                            controller: _ageController,
-                            keyboardType: TextInputType.number,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Edad',
-                              hintText: '25',
-                              prefixIcon: Icon(Icons.cake),
+                          child: InkWell(
+                            onTap: () => _selectBirthDate(context),
+                            borderRadius: BorderRadius.circular(TerritoryTokens.radiusMedium),
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: 'Fecha de Nacimiento',
+                                hintText: 'Selecciona tu fecha',
+                                prefixIcon: const Icon(Icons.cake),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(TerritoryTokens.radiusMedium),
+                                ),
+                              ),
+                              child: Text(
+                                _birthDate != null
+                                    ? _formatDate(_birthDate!)
+                                    : 'Selecciona tu fecha',
+                                style: TextStyle(
+                                  color: _birthDate != null
+                                      ? Theme.of(context).textTheme.bodyLarge?.color
+                                      : Theme.of(context).hintColor,
+                                ),
+                              ),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Requerido';
-                              }
-                              final age = int.tryParse(value);
-                              if (age == null || age < 13 || age > 100) {
-                                return 'Edad inválida';
-                              }
-                              return null;
-                            },
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: TerritoryTokens.space16),
                         Expanded(
                           child: DropdownButtonFormField<String>(
                             initialValue: _selectedGender,
@@ -330,7 +356,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: TerritoryTokens.space16),
                     
                     // Weight and Height Row
                     Row(
@@ -357,7 +383,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                             },
                           ),
                         ),
-                        const SizedBox(width: 16),
+                        const SizedBox(width: TerritoryTokens.space16),
                         Expanded(
                           child: TextFormField(
                             controller: _heightController,
@@ -382,7 +408,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: TerritoryTokens.space16),
                     
                     // Experience Level
                     DropdownButtonFormField<String>(

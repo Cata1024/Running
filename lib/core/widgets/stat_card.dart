@@ -53,7 +53,7 @@ class StatCard extends StatelessWidget {
                   ),
                   child: Icon(
                     icon,
-                    size: 18,
+                    size: 20,
                     color: effectiveColor,
                   ),
                 ),

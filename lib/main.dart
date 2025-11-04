@@ -10,7 +10,7 @@ import 'firebase_options.dart';
 import 'core/env_config.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/navigation/app_router.dart';
-import 'core/map_icons.dart';
+import 'presentation/widgets/achievement_notification.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,27 +20,44 @@ Future<void> main() async {
   if (baseApiUrl.isEmpty) {
     throw StateError('BASE_API_URL is not set in .env');
   }
-  runApp(const MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: DynamicMap(),
-  ));
 
   // Inicializar Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    await initFirebase();
+  } on UnsupportedError {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
 
-  await initializeDateFormatting('es');
-  await initializeDateFormatting('en');
+  await Future.wait([
+    initializeDateFormatting('es'),
+    initializeDateFormatting('en'),
+  ]);
+  await configureGoogleMaps();
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+  
   runApp(
     const ProviderScope(
       child: RunningApp(),
     ),
   );
+}
+
+/// Precarga imágenes críticas para mejorar performance inicial
+Future<void> precacheAppImages(BuildContext context) async {
+  try {
+    await Future.wait([
+      // Precachear iconos y assets críticos si existen
+      // precacheImage(const AssetImage('assets/images/logo.png'), context),
+      // precacheImage(const AssetImage('assets/images/splash.png'), context),
+    ]);
+  } catch (e) {
+    debugPrint('Error precaching images: $e');
+  }
 }
 
 class RunningApp extends ConsumerWidget {
@@ -68,6 +85,11 @@ class RunningApp extends ConsumerWidget {
             Locale('en'),
           ],
           debugShowCheckedModeBanner: false,
+          builder: (context, child) {
+            return AchievementNotificationOverlay(
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
         );
       },
     );

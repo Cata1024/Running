@@ -1,15 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/widgets/aero_container.dart';
+import 'package:in_app_review/in_app_review.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/aero_surface.dart';
 import '../../providers/app_providers.dart';
+import 'language_settings_screen.dart';
+import 'units_settings_screen.dart';
+import 'notifications_settings_screen.dart';
+import 'gps_settings_screen.dart';
+import 'privacy_settings_screen.dart';
+import 'about_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
+  
+  String _getGpsAccuracyLabel(String accuracy) {
+    switch (accuracy) {
+      case 'low':
+        return 'Baja';
+      case 'balanced':
+        return 'Equilibrada';
+      case 'high':
+        return 'Alta';
+      default:
+        return 'Equilibrada';
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider);
     
     return Scaffold(
       appBar: AppBar(
@@ -21,7 +44,10 @@ class SettingsScreen extends ConsumerWidget {
         child: Column(
           children: [
             // App Settings
-            GlassContainer(
+            AeroSurface(
+              level: AeroLevel.medium,
+              padding: const EdgeInsets.all(TerritoryTokens.space24),
+              borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -45,19 +71,25 @@ class SettingsScreen extends ConsumerWidget {
                   _SettingsTile(
                     icon: Icons.language,
                     title: 'Idioma',
-                    subtitle: 'Español',
+                    subtitle: settings.language == 'es' ? 'Español' : 'English',
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
-                      // Language settings
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LanguageSettingsScreen()),
+                      );
                     },
                   ),
                   _SettingsTile(
                     icon: Icons.notifications,
                     title: 'Notificaciones',
-                    subtitle: 'Configurar alertas y recordatorios',
+                    subtitle: settings.notificationsEnabled ? 'Activadas' : 'Desactivadas',
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
-                      // Notifications settings
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const NotificationsSettingsScreen()),
+                      );
                     },
                   ),
                 ],
@@ -66,7 +98,10 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             
             // Running Settings
-            GlassContainer(
+            AeroSurface(
+              level: AeroLevel.medium,
+              padding: const EdgeInsets.all(TerritoryTokens.space24),
+              borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -81,19 +116,25 @@ class SettingsScreen extends ConsumerWidget {
                   _SettingsTile(
                     icon: Icons.straighten,
                     title: 'Unidades',
-                    subtitle: 'Kilómetros y metros',
+                    subtitle: settings.units == 'metric' ? 'Kilómetros' : 'Millas',
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
-                      // Units settings
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const UnitsSettingsScreen()),
+                      );
                     },
                   ),
                   _SettingsTile(
                     icon: Icons.gps_fixed,
                     title: 'GPS',
-                    subtitle: 'Precisión y configuración',
+                    subtitle: 'Precisión: ${_getGpsAccuracyLabel(settings.gpsAccuracy)}',
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
-                      // GPS settings
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const GpsSettingsScreen()),
+                      );
                     },
                   ),
                   _SettingsTile(
@@ -101,9 +142,9 @@ class SettingsScreen extends ConsumerWidget {
                     title: 'Auto Pausa',
                     subtitle: 'Pausar automáticamente cuando te detienes',
                     trailing: Switch(
-                      value: true,
+                      value: settings.autoPauseEnabled,
                       onChanged: (value) {
-                        // Toggle auto pause
+                        ref.read(settingsProvider.notifier).toggleAutoPause(value);
                       },
                     ),
                     onTap: null,
@@ -114,7 +155,10 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             
             // Privacy & Security
-            GlassContainer(
+            AeroSurface(
+              level: AeroLevel.medium,
+              padding: const EdgeInsets.all(TerritoryTokens.space24),
+              borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -127,36 +171,15 @@ class SettingsScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   
                   _SettingsTile(
-                    icon: Icons.visibility,
-                    title: 'Perfil Público',
-                    subtitle: 'Permitir que otros vean tu perfil',
-                    trailing: Switch(
-                      value: false,
-                      onChanged: (value) {
-                        // Toggle public profile
-                      },
-                    ),
-                    onTap: null,
-                  ),
-                  _SettingsTile(
-                    icon: Icons.location_on,
-                    title: 'Compartir Ubicación',
-                    subtitle: 'Durante carreras en vivo',
-                    trailing: Switch(
-                      value: false,
-                      onChanged: (value) {
-                        // Toggle location sharing
-                      },
-                    ),
-                    onTap: null,
-                  ),
-                  _SettingsTile(
                     icon: Icons.security,
-                    title: 'Cambiar Contraseña',
-                    subtitle: 'Actualizar tu contraseña',
+                    title: 'Privacidad',
+                    subtitle: 'Perfil, ubicación y datos',
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () {
-                      // Change password
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const PrivacySettingsScreen()),
+                      );
                     },
                   ),
                 ],
@@ -165,7 +188,10 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             
             // About
-            GlassContainer(
+            AeroSurface(
+              level: AeroLevel.medium,
+              padding: const EdgeInsets.all(TerritoryTokens.space24),
+              borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -182,8 +208,11 @@ class SettingsScreen extends ConsumerWidget {
                     title: 'Ayuda y Soporte',
                     subtitle: 'FAQs y contacto',
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      // Help and support
+                    onTap: () async {
+                      final uri = Uri.parse('https://google.com/support');
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
                     },
                   ),
                   _SettingsTile(
@@ -191,16 +220,24 @@ class SettingsScreen extends ConsumerWidget {
                     title: 'Calificar App',
                     subtitle: 'Danos tu opinión en la tienda',
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () {
-                      // Rate app
+                    onTap: () async {
+                      final InAppReview inAppReview = InAppReview.instance;
+                      if (await inAppReview.isAvailable()) {
+                        inAppReview.requestReview();
+                      }
                     },
                   ),
                   _SettingsTile(
                     icon: Icons.info,
-                    title: 'Versión',
-                    subtitle: '1.0.0 (Beta)',
-                    trailing: null,
-                    onTap: null,
+                    title: 'Acerca de',
+                    subtitle: 'Versión, licencias y más',
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AboutScreen()),
+                      );
+                    },
                   ),
                 ],
               ),

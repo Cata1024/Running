@@ -49,3 +49,16 @@ app.*.map.json
 # Environment variables
 .env
 .env.local
+.env.production
+.env.development
+
+# Firebase configuration files (sensitive)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
+# Build artifacts
+*.kotlin_module
+.kotlin/
+
+# IDE
+.vscode/settings.json

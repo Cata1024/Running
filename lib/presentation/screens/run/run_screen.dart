@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -11,14 +12,27 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/map_icons.dart';
 import '../../../core/widgets/aero_surface.dart';
+import '../../../core/services/route_processor.dart';
 import '../../../domain/services/circuit_closure_validator.dart';
 import '../../../domain/services/territory_service.dart';
 import '../../../domain/track_processing/track_processing.dart';
 import '../../providers/app_providers.dart';
+import '../../providers/achievements_provider.dart';
 import '../../utils/map_style_utils.dart';
+import '../../widgets/level_up_notification.dart';
+import '../../../domain/entities/run.dart' as models;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../domain/services/level_service.dart';
+import 'widgets/run_calculations.dart';
 
 class RunScreen extends ConsumerStatefulWidget {
-  const RunScreen({super.key});
+  // ✅ Callback para notificar cambios de estado sin usar provider
+  final void Function(bool isRunning, bool isPaused)? onRunStateChanged;
+  
+  const RunScreen({
+    super.key,
+    this.onRunStateChanged,
+  });
 
   @override
   ConsumerState<RunScreen> createState() => _RunScreenState();
@@ -84,7 +98,8 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   // Estado del tracking
   bool _isRunning = false;
   bool _isPaused = false;
-  List<LatLng> _routePoints = [];
+  List<LatLng> _routePoints = []; // Raw GPS points
+  List<LatLng> _smoothedRoute = []; // Processed smooth route
   List<TrackPoint> _rawTrack = [];
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
@@ -92,6 +107,10 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   bool _isHudCollapsed = false;
   _GpsStatus _gpsStatus = _GpsStatus.initial;
   double? _lastAccuracy;
+  bool _followUser = true;
+  
+  // 🌊 ROUTE PROCESSOR - Filtrado GPS + Suavizado profesional
+  final RouteProcessor _routeProcessor = RouteProcessor();
 
   final List<String> _terrainOptions = const [
     'urbano',
@@ -117,6 +136,9 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   LatLng _currentLocation = const LatLng(4.6097, -74.0817);
   Timer? _timer;
   MapIconsBundle? _iconBundle;
+  
+  // Flag para prevenir guardado múltiple
+  bool _isSaving = false;
 
   void _toggleHud() {
     setState(() {
@@ -125,15 +147,13 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   }
 
   String _formattedPace() {
-    if (_totalDistance <= 0 || _elapsedTime.inSeconds <= 0) {
-      return '--:--';
-    }
-    final double paceSecPerKm = _elapsedTime.inSeconds / _totalDistance;
-    final int minutes = paceSecPerKm ~/ 60;
-    final int seconds = (paceSecPerKm % 60).round();
-    final String mm = minutes.toString().padLeft(2, '0');
-    final String ss = seconds.toString().padLeft(2, '0');
-    return '$mm:$ss';
+    final paceSecPerKm = RunCalculations.calculatePaceSecPerKm(_totalDistance, _elapsedTime);
+    return RunCalculations.formatPace(paceSecPerKm);
+  }
+
+  String _formattedSpeed() {
+    final speedKmh = RunCalculations.calculateSpeedKmh(_totalDistance, _elapsedTime);
+    return RunCalculations.formatSpeed(speedKmh);
   }
 
   _GpsStatus _deriveGpsStatus(double? accuracy) {
@@ -141,6 +161,38 @@ class _RunScreenState extends ConsumerState<RunScreen> {
     if (accuracy <= 10) return _GpsStatus.strong;
     if (accuracy <= 25) return _GpsStatus.medium;
     return _GpsStatus.weak;
+  }
+
+  /// Helper para notificar cambios de estado
+  /// Usa callback directo en lugar de provider (más seguro)
+  void _notifyRunStateChanged() {
+    // ✅ Notificar via callback (sin provider)
+    widget.onRunStateChanged?.call(_isRunning, _isPaused);
+  }
+
+  /// 🔬 Procesar ruta en background con filtro Kalman + suavizado
+  /// Se ejecuta cada 10 puntos GPS para mantener visualización suave
+  Future<void> _processRouteInBackground() async {
+    if (_routePoints.length < 20) return;
+
+    try {
+      // Usar config suave para visualización en tiempo real
+      final result = await _routeProcessor.processRoute(
+        rawPoints: _routePoints,
+        config: const RouteProcessingConfig.smooth(),
+      );
+
+      if (mounted) {
+        setState(() {
+          _smoothedRoute = result.smoothedPoints;
+          // Rebuild polylines con ruta suavizada
+          _polylines = _buildPolylines(Theme.of(context));
+        });
+      }
+    } catch (e) {
+      // Si hay error, continuar con ruta cruda
+      debugPrint('Error procesando ruta: $e');
+    }
   }
 
   Color _gpsStatusColor(ThemeData theme) {
@@ -209,12 +261,15 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   }
 
   Set<Polyline> _buildPolylines(ThemeData theme) {
-    if (_routePoints.length < 2) return const <Polyline>{};
+    // 🌊 USAR RUTA SUAVIZADA si está disponible (calidad Strava/Nike RC)
+    final displayPoints = _smoothedRoute.isNotEmpty ? _smoothedRoute : _routePoints;
+    
+    if (displayPoints.length < 2) return const <Polyline>{};
 
     return {
       Polyline(
         polylineId: const PolylineId('route'),
-        points: _routePoints,
+        points: displayPoints,
         color: theme.colorScheme.primary,
         width: 6,
         startCap: Cap.roundCap,
@@ -227,13 +282,20 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   @override
   void initState() {
     super.initState();
-    _getCurrentLocation();
-    ref.read(mapIconsProvider.future).then((bundle) {
-      if (!mounted) return;
-      setState(() {
-        _iconBundle = bundle;
-        _markers = _buildMarkers(bundle);
-      });
+    
+    // ✅ Obtener ubicación y cargar iconos DESPUÉS del build inicial
+    // Delay adicional para evitar conflictos con provider
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (mounted) {
+        _getCurrentLocation();
+        ref.read(mapIconsProvider.future).then((bundle) {
+          if (!mounted) return;
+          setState(() {
+            _iconBundle = bundle;
+            _markers = _buildMarkers(bundle);
+          });
+        });
+      }
     });
   }
 
@@ -241,11 +303,38 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   void dispose() {
     _positionStream?.cancel();
     _timer?.cancel();
+    _mapController?.dispose();
     super.dispose();
   }
 
   Future<void> _getCurrentLocation() async {
     try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Ubicación desactivada'),
+            content: const Text('Activa el servicio de ubicación para continuar.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  await Geolocator.openLocationSettings();
+                  if (ctx.mounted) Navigator.of(ctx).pop();
+                },
+                child: const Text('Abrir ajustes'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -253,6 +342,28 @@ class _RunScreenState extends ConsumerState<RunScreen> {
 
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
+        if (permission == LocationPermission.deniedForever && mounted) {
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Permiso requerido'),
+              content: const Text('Otorga permisos de ubicación en Ajustes para usar el mapa.'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cerrar'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    await Geolocator.openAppSettings();
+                    if (ctx.mounted) Navigator.of(ctx).pop();
+                  },
+                  child: const Text('Abrir ajustes'),
+                ),
+              ],
+            ),
+          );
+        }
         return;
       }
 
@@ -269,8 +380,10 @@ class _RunScreenState extends ConsumerState<RunScreen> {
         _markers = _buildMarkers();
       });
 
-      _mapController
-          ?.animateCamera(CameraUpdate.newLatLngZoom(_currentLocation, 17));
+      if (_followUser) {
+        _mapController
+            ?.animateCamera(CameraUpdate.newLatLngZoom(_currentLocation, 17));
+      }
     } catch (e) {
       debugPrint('Error obteniendo ubicación: $e');
     }
@@ -318,8 +431,15 @@ class _RunScreenState extends ConsumerState<RunScreen> {
         _polylines = _buildPolylines(theme);
       });
 
-      _mapController
-          ?.animateCamera(CameraUpdate.newLatLngZoom(newLocation, 17));
+      // 🌊 PROCESAR RUTA cada 10 puntos para suavizado en tiempo real
+      if (_routePoints.length % 10 == 0 && _routePoints.length >= 20) {
+        _processRouteInBackground();
+      }
+
+      if (_followUser) {
+        _mapController
+            ?.animateCamera(CameraUpdate.newLatLngZoom(newLocation, 17));
+      }
     });
 
     // Timer para el cronómetro
@@ -332,66 +452,85 @@ class _RunScreenState extends ConsumerState<RunScreen> {
     });
   }
 
-  Future<void> _toggleRun() async {
-    if (_isRunning) {
-      _positionStream?.cancel();
-      _timer?.cancel();
-      setState(() {
-        _isRunning = false;
-        _isPaused = false;
-        _markers = _buildMarkers();
-      });
-      ref.read(runStateProvider.notifier).setRunning(isRunning: false);
+  void _toggleRun() {
+    // ✅ NO USAR async/await en el handler directo del botón
+    // Programar después del frame actual para evitar "during build"
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      
+      if (_isRunning) {
+        // DETENER carrera
+        _positionStream?.cancel();
+        _timer?.cancel();
+        setState(() {
+          _isRunning = false;
+          _isPaused = false;
+          _markers = _buildMarkers();
+        });
+        
+        // Notificar cambio de estado
+        _notifyRunStateChanged();
 
-      try {
-        final conditions = await _promptRunConditions();
-        await _saveRunToBackend(conditions: conditions);
+        // Esperar un frame adicional para que el callback de navegación termine
+        await Future.delayed(const Duration(milliseconds: 100));
         if (!mounted) return;
-        if (conditions != null) {
-          HapticFeedback.mediumImpact();
+
+        try {
+          final conditions = await _promptRunConditions();
+          await _saveRunToBackend(conditions: conditions);
+          if (!mounted) return;
+          if (conditions != null) {
+            HapticFeedback.mediumImpact();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Carrera guardada exitosamente')),
+            );
+          }
+        } catch (e) {
+          debugPrint('Error finalizando la carrera: $e');
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Carrera guardada exitosamente')),
+            SnackBar(
+              content: Text('No se pudo guardar la carrera: $e'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
           );
         }
-      } catch (e) {
-        debugPrint('Error finalizando la carrera: $e');
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('No se pudo guardar la carrera: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+      } else {
+        // INICIAR carrera
+        setState(() {
+          _isRunning = true;
+          _isPaused = false;
+          _elapsedTime = Duration.zero;
+          _totalDistance = 0.0;
+          _routePoints = [];
+          _smoothedRoute = [];
+          _rawTrack = [];
+          _markers = _buildMarkers();
+          _polylines = {};
+          _startedAt = DateTime.now();
+        });
+        
+        // Notificar cambio de estado
+        _notifyRunStateChanged();
+        
+        _startTracking();
       }
-    } else {
-      // Start run: resetear estado y comenzar tracking
-      setState(() {
-        _isRunning = true;
-        _isPaused = false;
-        _elapsedTime = Duration.zero;
-        _totalDistance = 0.0;
-        _routePoints = [];
-        _rawTrack = [];
-        _markers = _buildMarkers();
-        _polylines = {};
-        _startedAt = DateTime.now();
-      });
-      ref.read(runStateProvider.notifier).setRunning(
-            isRunning: true,
-            isPaused: false,
-          );
-      _startTracking();
-    }
+    });
   }
 
   void _pauseRun() {
-    if (_isRunning) {
+    // ✅ Programar después del frame actual
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isRunning) return;
+      
       setState(() {
         _isPaused = !_isPaused;
         _markers = _buildMarkers();
       });
-      ref.read(runStateProvider.notifier).setPaused(_isPaused);
-    }
+      
+      // Notificar cambio de estado
+      _notifyRunStateChanged();
+    });
   }
 
   String _formatTime(Duration duration) {
@@ -512,11 +651,6 @@ class _RunScreenState extends ConsumerState<RunScreen> {
 
     String? selectedTerrain = _terrainOptions.first;
     String? selectedMood = _moodOptions.first;
-    String? weatherCondition;
-    String temperatureText = '';
-
-    final weatherController = TextEditingController(text: weatherCondition);
-    final temperatureController = TextEditingController(text: temperatureText);
 
     Map<String, dynamic>? result;
     try {
@@ -541,12 +675,20 @@ class _RunScreenState extends ConsumerState<RunScreen> {
                       'Detalles de la carrera',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'El clima se obtendrá automáticamente de tu ubicación',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       initialValue: selectedTerrain,
                       decoration: const InputDecoration(
-                        labelText: 'Terreno',
+                        labelText: 'Tipo de terreno',
                         border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.terrain),
                       ),
                       items: _terrainOptions
                           .map((option) => DropdownMenuItem(
@@ -560,12 +702,13 @@ class _RunScreenState extends ConsumerState<RunScreen> {
                         });
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
                       initialValue: selectedMood,
                       decoration: const InputDecoration(
-                        labelText: 'Estado de ánimo',
+                        labelText: '¿Cómo te sentiste?',
                         border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.sentiment_satisfied_alt),
                       ),
                       items: _moodOptions
                           .map((option) => DropdownMenuItem(
@@ -579,68 +722,29 @@ class _RunScreenState extends ConsumerState<RunScreen> {
                         });
                       },
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: weatherController,
-                      decoration: const InputDecoration(
-                        labelText: 'Clima',
-                        hintText: 'Despejado, lluvioso, etc.',
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) {
-                        setModalState(() {
-                          weatherCondition = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: temperatureController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true, signed: false),
-                      decoration: const InputDecoration(
-                        labelText: 'Temperatura (°C)',
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) {
-                        setModalState(() {
-                          temperatureText = value;
-                        });
-                      },
-                    ),
                     const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton(
+                      child: FilledButton.icon(
                         onPressed: () {
-                          double? temperature;
-                          if (temperatureText.trim().isNotEmpty) {
-                            temperature =
-                                double.tryParse(temperatureText.trim());
-                          }
                           Navigator.of(context).pop({
                             'terrain': selectedTerrain,
                             'mood': selectedMood,
-                            'weather': {
-                              'condition':
-                                  weatherController.text.trim().isNotEmpty
-                                      ? weatherController.text.trim()
-                                      : null,
-                              'temperatureC': temperature,
-                            },
                           });
                         },
-                        child: const Text('Guardar detalles'),
+                        icon: const Icon(Icons.check),
+                        label: const Text('Guardar'),
                       ),
                     ),
                     const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
-                      child: TextButton(
+                      child: TextButton.icon(
                         onPressed: () {
                           Navigator.of(context).pop(null);
                         },
-                        child: const Text('Omitir'),
+                        icon: const Icon(Icons.skip_next),
+                        label: const Text('Omitir'),
                       ),
                     ),
                   ],
@@ -650,32 +754,43 @@ class _RunScreenState extends ConsumerState<RunScreen> {
           );
         },
       );
-    } finally {
-      weatherController.dispose();
-      temperatureController.dispose();
+    } catch (e) {
+      debugPrint('Error showing details modal: $e');
+      return null;
     }
 
     return result;
   }
 
   Future<void> _saveRunToBackend({Map<String, dynamic>? conditions}) async {
+    // Prevenir ejecuciones múltiples (race condition)
+    if (_isSaving) return;
+    _isSaving = true;
+    
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return;
       if (_startedAt == null) return;
       final endedAt = DateTime.now();
 
+      // 🌊 PROCESAR RUTA FINAL con config de almacenamiento (máxima compresión)
+      final finalResult = await _routeProcessor.processRoute(
+        rawPoints: _routePoints,
+        config: const RouteProcessingConfig.storage(),
+      );
+
+      // Legacy processing para compatibilidad con backend
       final processing = await processTrackPipeline(_rawTrack);
       final processedTrack = processing.simplifiedTrack.isNotEmpty
           ? processing.simplifiedTrack
           : _rawTrack;
 
-      if (mounted && processedTrack.isNotEmpty) {
+      if (mounted && finalResult.smoothedPoints.isNotEmpty) {
         final theme = Theme.of(context);
         setState(() {
-          _routePoints = processedTrack
-              .map((p) => LatLng(p.lat, p.lon))
-              .toList(growable: false);
+          // Usar ruta suavizada para visualización final
+          _smoothedRoute = finalResult.smoothedPoints;
+          _routePoints = finalResult.simplifiedPoints;
           _currentLocation = _routePoints.last;
           _markers = _buildMarkers();
           _polylines = _buildPolylines(theme);
@@ -714,15 +829,18 @@ class _RunScreenState extends ConsumerState<RunScreen> {
       final routeGeoJson =
           territoryService.buildLineStringFromTrack(processedTrack);
       final storageInfo = await _uploadTrackArtifacts(uid, processing);
-      final runConditions = conditions ??
-          {
-            'terrain': null,
-            'mood': null,
-            'weather': {
-              'condition': null,
-              'temperatureC': null,
-            },
-          };
+      
+      // Condiciones de la carrera (terrain y mood del usuario)
+      // El clima se obtendrá automáticamente en el backend usando la ubicación
+      final runConditions = conditions != null
+          ? {
+              'terrain': conditions['terrain'],
+              'mood': conditions['mood'],
+            }
+          : {
+              'terrain': null,
+              'mood': null,
+            };
 
       final runData = {
         'userId': uid,
@@ -747,6 +865,13 @@ class _RunScreenState extends ConsumerState<RunScreen> {
             : _currentLocation.longitude,
         'routeGeoJson': routeGeoJson,
         'summaryPolyline': processing.summaryPolyline,
+        // 📦 NUEVO: Polyline encoding profesional (compresión -94%)
+        'polyline': finalResult.encodedPolyline,
+        'processingStats': {
+          'originalPoints': finalResult.stats.originalPoints,
+          'processedPoints': finalResult.stats.processedPoints,
+          'reductionRate': finalResult.stats.reductionRate,
+        },
         'simplification': processing.simplificationMetadata,
         'metrics': {
           'distanceKm': distanceKm,
@@ -809,8 +934,54 @@ class _RunScreenState extends ConsumerState<RunScreen> {
       ref.invalidate(runDocProvider(runId));
       ref.invalidate(userProfileDocProvider);
       ref.invalidate(userTerritoryDocProvider);
+
+      // 🏆 Procesar logros y XP tras guardar
+      try {
+        final achievementsService = ref.read(achievementsServiceProvider);
+        await achievementsService.initialize();
+
+        final runModel = models.Run(
+          id: runId,
+          startTime: _startedAt!,
+          durationSeconds: movingTimeSeconds,
+          distanceMeters: distanceMeters,
+          avgSpeedKmh: movingTimeSeconds > 0
+              ? (distanceMeters / movingTimeSeconds) * 3.6
+              : 0,
+          territoryCovered: (areaGainedM2 ?? 0) > 0 ? 1 : 0, // aproximado
+          isClosed: isClosed,
+        );
+
+        final unlocked = await achievementsService.processRunForAchievements(runModel);
+        if (unlocked.isNotEmpty) {
+          // Mostrar notificaciones por cada logro
+          final notifier = ref.read(achievementNotificationProvider.notifier);
+          for (final a in unlocked) {
+            notifier.showAchievement(a);
+          }
+
+          // Sumar XP y mostrar overlay de Level Up si aplica
+          final totalXp = unlocked.fold<int>(0, (sum, a) => sum + a.xpReward);
+          if (totalXp > 0) {
+            final uid = FirebaseAuth.instance.currentUser?.uid;
+            if (uid != null && mounted) {
+              final prefs = await SharedPreferences.getInstance();
+              final levelService = LevelService(prefs: prefs);
+              final levelUp = await levelService.addXP(uid, totalXp);
+              if (levelUp != null && mounted) {
+                LevelUpOverlayManager.show(context, levelUp);
+                await levelService.recordLevelMilestone(uid, levelUp);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Achievements processing error: $e');
+      }
     } catch (e) {
       debugPrint('Error guardando run: $e');
+    } finally {
+      _isSaving = false;
     }
   }
 
@@ -821,15 +992,16 @@ class _RunScreenState extends ConsumerState<RunScreen> {
     final mapType = ref.watch(mapTypeProvider);
     final mapStyle = ref.watch(mapStyleProvider);
     final styleString = resolveMapStyle(mapStyle, theme.brightness);
-    final runState = ref.watch(runStateProvider);
+    // ✅ USAR ESTADO LOCAL en lugar de observar provider (evita dependencia circular)
     final mediaPadding = MediaQuery.of(context).padding;
-    final bool navVisible = !(runState.isRunning && !runState.isPaused);
-    const double navHeight = 64;
-    final double navBottomPadding =
-        mediaPadding.bottom + TerritoryTokens.space24;
+    final bool navVisible = !(_isRunning && !_isPaused);
+    final navBarHeight = ref.watch(navBarHeightProvider);
+    final double navClearance = navVisible
+        ? math.max(navBarHeight - TerritoryTokens.space20, 0)
+        : 0;
     final double bottomOffset = navVisible
-        ? navHeight + navBottomPadding + TerritoryTokens.space12
-        : mediaPadding.bottom + TerritoryTokens.space16;
+        ? mediaPadding.bottom + navClearance + TerritoryTokens.space8
+        : mediaPadding.bottom + TerritoryTokens.space12;
     final double topOffset = mediaPadding.top + TerritoryTokens.space16;
     final Set<Polygon> territoryPolygons = territoryAsync.maybeWhen(
       data: (doc) => _parseTerritoryPolygons(doc, theme),
@@ -854,6 +1026,12 @@ class _RunScreenState extends ConsumerState<RunScreen> {
               onMapCreated: (controller) {
                 _mapController = controller;
               },
+              onCameraMoveStarted: () {
+                if (!mounted) return;
+                setState(() {
+                  _followUser = false;
+                });
+              },
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
@@ -867,6 +1045,7 @@ class _RunScreenState extends ConsumerState<RunScreen> {
               elapsedLabel: _formatTime(_elapsedTime),
               distanceLabel: _totalDistance.toStringAsFixed(2),
               paceLabel: _formattedPace(),
+              speedLabel: _formattedSpeed(),
               gpsLabel: _gpsStatusLabel(),
               gpsColor: _gpsStatusColor(theme),
               accuracy: _lastAccuracy,
@@ -883,9 +1062,15 @@ class _RunScreenState extends ConsumerState<RunScreen> {
             child: _ControlPanel(
               isRunning: _isRunning,
               isPaused: _isPaused,
-              onCenter: () => _mapController?.animateCamera(
-                CameraUpdate.newLatLngZoom(_currentLocation, 17),
-              ),
+              onCenter: () {
+                if (!mounted) return;
+                setState(() {
+                  _followUser = true;
+                });
+                _mapController?.animateCamera(
+                  CameraUpdate.newLatLngZoom(_currentLocation, 17),
+                );
+              },
               onToggleRun: _toggleRun,
               onTogglePause: _isRunning ? _pauseRun : null,
             ),
@@ -900,6 +1085,7 @@ class _RunHud extends StatelessWidget {
   final String elapsedLabel;
   final String distanceLabel;
   final String paceLabel;
+  final String speedLabel;
   final String gpsLabel;
   final Color gpsColor;
   final double? accuracy;
@@ -912,6 +1098,7 @@ class _RunHud extends StatelessWidget {
     required this.elapsedLabel,
     required this.distanceLabel,
     required this.paceLabel,
+    required this.speedLabel,
     required this.gpsLabel,
     required this.gpsColor,
     required this.accuracy,
@@ -947,6 +1134,7 @@ class _RunHud extends StatelessWidget {
                 elapsedLabel: elapsedLabel,
                 distanceLabel: distanceLabel,
                 paceLabel: paceLabel,
+                speedLabel: speedLabel,
                 gpsLabel: gpsLabel,
                 gpsColor: gpsColor,
                 accuracy: accuracy,
@@ -960,6 +1148,7 @@ class _ExpandedHud extends StatelessWidget {
   final String elapsedLabel;
   final String distanceLabel;
   final String paceLabel;
+  final String speedLabel;
   final String gpsLabel;
   final Color gpsColor;
   final double? accuracy;
@@ -968,6 +1157,7 @@ class _ExpandedHud extends StatelessWidget {
     required this.elapsedLabel,
     required this.distanceLabel,
     required this.paceLabel,
+    required this.speedLabel,
     required this.gpsLabel,
     required this.gpsColor,
     required this.accuracy,
@@ -994,22 +1184,40 @@ class _ExpandedHud extends StatelessWidget {
         children: [
           Row(
             children: [
-              _StatChip(
-                label: 'Tiempo',
-                value: elapsedLabel,
-                textStyle: textStyle,
+              Expanded(
+                child: _StatChip(
+                  label: 'Tiempo',
+                  value: elapsedLabel,
+                  textStyle: textStyle,
+                ),
               ),
               const SizedBox(width: TerritoryTokens.space12),
-              _StatChip(
-                label: 'Distancia',
-                value: '$distanceLabel km',
-                textStyle: textStyle,
+              Expanded(
+                child: _StatChip(
+                  label: 'Distancia',
+                  value: '$distanceLabel km',
+                  textStyle: textStyle,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: TerritoryTokens.space12),
+          Row(
+            children: [
+              Expanded(
+                child: _StatChip(
+                  label: 'Ritmo',
+                  value: '$paceLabel min/km',
+                  textStyle: textStyle,
+                ),
               ),
               const SizedBox(width: TerritoryTokens.space12),
-              _StatChip(
-                label: 'Ritmo',
-                value: '$paceLabel min/km',
-                textStyle: textStyle,
+              Expanded(
+                child: _StatChip(
+                  label: 'Velocidad',
+                  value: '$speedLabel km/h',
+                  textStyle: textStyle,
+                ),
               ),
             ],
           ),
@@ -1177,30 +1385,27 @@ class _ControlPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final buttonSpacing = TerritoryTokens.space12;
+    const buttonSpacing = TerritoryTokens.space12;
 
     final buttons = <Widget>[
       Expanded(
-        child: _ControlButton(
+        child: _PrimaryControlButton(
           icon: Icons.my_location,
-          label: 'Centrar',
+          label: '',
           onTap: onCenter,
-          backgroundColor: theme.colorScheme.surfaceContainerHighest
-              .withValues(alpha: 0.7),
+          backgroundColor: theme.colorScheme.surfaceContainerHigh,
           foregroundColor: theme.colorScheme.onSurface,
         ),
       ),
-      SizedBox(width: buttonSpacing),
+      const SizedBox(width: buttonSpacing),
       Expanded(
         flex: 2,
-        child: _ControlButton(
+        child: _PrimaryControlButton(
           icon: isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
-          label: isRunning ? 'Detener' : 'Iniciar',
+          label: isRunning ? 'Detener' : 'Iniciar carrera',
           onTap: onToggleRun,
-          backgroundColor: (isRunning
-                  ? theme.colorScheme.error
-                  : theme.colorScheme.primary)
-              .withValues(alpha: 0.9),
+          backgroundColor:
+              isRunning ? theme.colorScheme.error : theme.colorScheme.primary,
           foregroundColor: isRunning
               ? theme.colorScheme.onError
               : theme.colorScheme.onPrimary,
@@ -1210,16 +1415,15 @@ class _ControlPanel extends StatelessWidget {
 
     if (isRunning) {
       buttons
-        ..add(SizedBox(width: buttonSpacing))
+        ..add(const SizedBox(width: buttonSpacing))
         ..add(
           Expanded(
-            child: _ControlButton(
+            child: _PrimaryControlButton(
               icon: isPaused ? Icons.play_arrow : Icons.pause,
-              label: isPaused ? 'Reanudar' : 'Pausar',
+              label: isPaused ? '' : '',
               onTap: onTogglePause,
-              backgroundColor:
-                  theme.colorScheme.tertiary.withValues(alpha: 0.85),
-              foregroundColor: theme.colorScheme.onTertiary,
+              backgroundColor: theme.colorScheme.tertiaryContainer,
+              foregroundColor: theme.colorScheme.onTertiaryContainer,
             ),
           ),
         );
@@ -1237,14 +1441,14 @@ class _ControlPanel extends StatelessWidget {
   }
 }
 
-class _ControlButton extends StatelessWidget {
+class _PrimaryControlButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
   final Color backgroundColor;
   final Color foregroundColor;
 
-  const _ControlButton({
+  const _PrimaryControlButton({
     required this.icon,
     required this.label,
     required this.onTap,
@@ -1256,48 +1460,44 @@ class _ControlButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final disabled = onTap == null;
+    final hasLabel = label.trim().isNotEmpty;
 
     return Opacity(
       opacity: disabled ? 0.6 : 1,
       child: GestureDetector(
         onTap: disabled ? null : onTap,
         child: SizedBox(
-          height: 56,
+          height: 60,
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: backgroundColor,
-              borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
+              borderRadius: BorderRadius.circular(TerritoryTokens.radiusPill),
               border: Border.all(
-                color:
-                    theme.colorScheme.outlineVariant.withValues(alpha: 0.24),
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.24),
               ),
               boxShadow: TerritoryTokens.shadowSubtle(
                 theme.colorScheme.shadow,
               ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: TerritoryTokens.space16,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.max,
-                children: [
-                  Icon(icon, color: foregroundColor, size: 24),
-                  const SizedBox(width: TerritoryTokens.space8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                Icon(icon, color: foregroundColor),
+                if (hasLabel) ...[
+                  const SizedBox(width: TerritoryTokens.space12),
                   Flexible(
                     child: Text(
                       label,
-                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelLarge?.copyWith(
+                      style: theme.textTheme.titleMedium?.copyWith(
                         color: foregroundColor,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
           ),
         ),

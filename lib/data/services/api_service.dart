@@ -141,6 +141,11 @@ class ApiService {
   Future<void> patchUserProfile(String uid, Map<String, dynamic> data) async {
     await _request('PATCH', '/profile/$uid', body: data);
   }
+  
+  /// Alias para updateUserProfile (usa PATCH internamente)
+  Future<void> updateUserProfile(String uid, Map<String, dynamic> data) async {
+    await patchUserProfile(uid, data);
+  }
 
   Future<Map<String, dynamic>?> fetchTerritory(String uid) async {
     try {
@@ -195,5 +200,44 @@ class ApiService {
 
   Future<void> deleteRun(String id) async {
     await _request('DELETE', '/runs/$id');
+  }
+
+  Future<Map<String, dynamic>?> getWeatherForLocation(double lat, double lon) async {
+    final apiKey = EnvConfig.instance.googleMapsApiKey;
+    if (apiKey.isEmpty) {
+      throw ApiException(statusCode: 500, message: 'GOOGLE_MAPS_API_KEY is not set');
+    }
+
+    final uri = Uri.parse('https://weather.googleapis.com/v1/currentConditions:lookup?key=$apiKey');
+    
+    try {
+      final response = await _client.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'location': {
+            'latitude': lat,
+            'longitude': lon,
+          },
+          'languageCode': 'es',
+        }),
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.isEmpty) return null;
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      } else {
+        throw ApiException(
+          statusCode: response.statusCode,
+          message: response.body.isNotEmpty ? response.body : response.reasonPhrase ?? 'Failed to fetch weather',
+        );
+      }
+    } catch (e) {
+      throw ApiException(
+        statusCode: 500,
+        message: 'Network error fetching weather: $e',
+        originalError: e,
+      );
+    }
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 
 
 /// Runtime configuration sourced from `.env`.
@@ -80,6 +81,23 @@ Future<void> initFirebase() async {
   try {
     await Firebase.initializeApp(options: options);
     debugPrint('[EnvConfig] Firebase initialized with ${options.projectId}.');
+    
+    // Inicializar App Check
+    // Debug mode: usa debug provider
+    // Release mode: usa Play Integrity (Android) / Device Check (iOS)
+    try {
+      await FirebaseAppCheck.instance.activate(
+        androidProvider: kDebugMode 
+            ? AndroidProvider.debug 
+            : AndroidProvider.playIntegrity,
+        appleProvider: kDebugMode 
+            ? AppleProvider.debug 
+            : AppleProvider.deviceCheck,
+      );
+      debugPrint('[EnvConfig] Firebase App Check activated (${kDebugMode ? "debug" : "production"} mode).');
+    } catch (e) {
+      debugPrint('[EnvConfig] App Check activation failed (non-critical): $e');
+    }
   } on FirebaseException catch (e) {
     if (e.code == 'duplicate-app') {
       debugPrint(

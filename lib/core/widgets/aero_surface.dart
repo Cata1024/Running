@@ -21,6 +21,7 @@ class AeroSurface extends StatelessWidget {
   final BorderRadius? borderRadius;
   final bool enableBlur;
   final VoidCallback? onTap;
+  final String? semanticLabel;
 
   const AeroSurface({
     super.key,
@@ -33,7 +34,43 @@ class AeroSurface extends StatelessWidget {
     this.borderRadius,
     this.enableBlur = true,
     this.onTap,
+    this.semanticLabel,
   });
+
+  /// Crea un fondo de pantalla completo con blur/gradiente siguiendo los tokens aero.
+  static Widget fullscreenBackground({
+    required ThemeData theme,
+    double? blurSigma,
+    double? startOpacity,
+    double? endOpacity,
+    Color? surfaceColor,
+  }) {
+    final sigma = blurSigma ?? TerritoryTokens.blurSubtle;
+    final beginOpacity = startOpacity ?? (TerritoryTokens.opacityGhost * 0.5);
+    final finishOpacity = endOpacity ?? (TerritoryTokens.opacitySubtle * 0.55);
+    final Color baseColor = surfaceColor ?? theme.colorScheme.surface;
+
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaX: sigma,
+          sigmaY: sigma,
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                baseColor.withValues(alpha: beginOpacity),
+                baseColor.withValues(alpha: finishOpacity),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +115,11 @@ class AeroSurface extends StatelessWidget {
     }
 
     if (onTap != null) {
-      content = GestureDetector(onTap: onTap, child: content);
+      content = Semantics(
+        button: true,
+        label: semanticLabel,
+        child: GestureDetector(onTap: onTap, child: content),
+      );
     }
 
     return content;

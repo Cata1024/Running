@@ -90,6 +90,16 @@ class AuthFailure extends Failure {
     message: 'Las credenciales son inválidas o han expirado.',
     code: 'invalid-credential',
   );
+
+  factory AuthFailure.invalidData() => const AuthFailure(
+    message: 'Los datos proporcionados no son válidos.',
+    code: 'invalid-data',
+  );
+
+  factory AuthFailure.notImplemented() => const AuthFailure(
+    message: 'Esta funcionalidad aún no está implementada.',
+    code: 'not-implemented',
+  );
 }
 
 /// Failures de base de datos

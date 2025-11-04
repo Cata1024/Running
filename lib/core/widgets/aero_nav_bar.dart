@@ -18,6 +18,8 @@ class AeroNavBar extends StatefulWidget {
   final ValueChanged<int> onItemSelected;
   final bool visible;
 
+  static const double preferredHeight = 64 + TerritoryTokens.space24;
+
   const AeroNavBar({
     super.key,
     required this.items,
@@ -204,10 +206,15 @@ class _NavButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: AnimatedContainer(
+    return Semantics(
+      button: true,
+      label: label,
+      selected: selected,
+      enabled: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: AnimatedContainer(
         duration: TerritoryTokens.durationFast,
         padding: const EdgeInsets.symmetric(
           vertical: TerritoryTokens.space8,
@@ -234,6 +241,7 @@ class _NavButton extends StatelessWidget {
               child: Text(label),
             ),
           ],
+        ),
         ),
       ),
     );

@@ -18,6 +18,8 @@ class UserProfile {
   final String? gender;
   final String preferredUnits;
   final String? goalDescription;
+  final String? goalType; // fitness, weight_loss, competition, fun
+  final double? weeklyDistanceGoal; // km por semana
 
   const UserProfile({
     required this.id,
@@ -38,6 +40,8 @@ class UserProfile {
     this.gender,
     this.preferredUnits = 'metric',
     this.goalDescription,
+    this.goalType,
+    this.weeklyDistanceGoal,
   });
 
   /// Constructor desde JSON (REST API)
@@ -61,6 +65,8 @@ class UserProfile {
       gender: data['gender'],
       preferredUnits: data['preferredUnits'] ?? 'metric',
       goalDescription: data['goalDescription'],
+      goalType: data['goalType'],
+      weeklyDistanceGoal: data['weeklyDistanceGoal']?.toDouble(),
     );
   }
 
@@ -86,6 +92,8 @@ class UserProfile {
       if (gender != null) 'gender': gender,
       'preferredUnits': preferredUnits,
       if (goalDescription != null) 'goalDescription': goalDescription,
+      if (goalType != null) 'goalType': goalType,
+      if (weeklyDistanceGoal != null) 'weeklyDistanceGoal': weeklyDistanceGoal,
     };
   }
 
@@ -109,6 +117,8 @@ class UserProfile {
     String? gender,
     String? preferredUnits,
     String? goalDescription,
+    String? goalType,
+    double? weeklyDistanceGoal,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -129,6 +139,8 @@ class UserProfile {
       gender: gender ?? this.gender,
       preferredUnits: preferredUnits ?? this.preferredUnits,
       goalDescription: goalDescription ?? this.goalDescription,
+      goalType: goalType ?? this.goalType,
+      weeklyDistanceGoal: weeklyDistanceGoal ?? this.weeklyDistanceGoal,
     );
   }
 

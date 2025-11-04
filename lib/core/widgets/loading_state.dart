@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import 'aero_container.dart';
+import 'aero_surface.dart';
 
 /// Widget para mostrar estados de carga
 class LoadingState extends StatelessWidget {
@@ -11,14 +11,15 @@ class LoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: GlassContainer(
-        padding: EdgeInsets.all(AppTheme.space32),
+      child: AeroSurface(
+        level: AeroLevel.medium,
+        padding: const EdgeInsets.all(AppTheme.space32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const CircularProgressIndicator(),
             if (message != null) ...[
-              SizedBox(height: AppTheme.space16),
+              const SizedBox(height: AppTheme.space16),
               Text(
                 message!,
                 style: TextStyle(

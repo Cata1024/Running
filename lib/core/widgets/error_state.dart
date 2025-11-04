@@ -20,7 +20,7 @@ class ErrorState extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(TerritoryTokens.space48),
+        padding: const EdgeInsets.all(TerritoryTokens.space48),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -29,7 +29,7 @@ class ErrorState extends StatelessWidget {
               size: 120,
               color: scheme.error.withValues(alpha: 0.5),
             ),
-            SizedBox(height: TerritoryTokens.space24),
+            const SizedBox(height: TerritoryTokens.space24),
             Text(
               title,
               style: const TextStyle(
@@ -38,7 +38,7 @@ class ErrorState extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: TerritoryTokens.space12),
+            const SizedBox(height: TerritoryTokens.space12),
             Text(
               message,
               style: TextStyle(
@@ -48,7 +48,7 @@ class ErrorState extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
-              SizedBox(height: TerritoryTokens.space32),
+              const SizedBox(height: TerritoryTokens.space32),
               AeroButton(
                 onPressed: onRetry,
                 child: const Row(
