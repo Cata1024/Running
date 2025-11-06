@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Colores principales con mejor contraste y modernidad
@@ -164,7 +163,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
-          borderSide: BorderSide(color: primaryGradientStart, width: 2),
+          borderSide: const BorderSide(color: primaryGradientStart, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
@@ -173,7 +172,7 @@ class AppTheme {
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
-          borderSide: BorderSide(color: errorColor, width: 2),
+          borderSide: const BorderSide(color: errorColor, width: 2),
         ),
         labelStyle: textTheme.bodyMedium?.copyWith(
           color: Colors.grey[600],
@@ -188,7 +187,7 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLarge),
-          side: BorderSide(color: glassBorder, width: 1),
+          side: const BorderSide(color: glassBorder, width: 1),
         ),
         color: Colors.white.withValues(alpha: 0.9),
       ),
@@ -309,7 +308,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
-          borderSide: BorderSide(color: primaryGradientStart, width: 2),
+          borderSide: const BorderSide(color: primaryGradientStart, width: 2),
         ),
       ),
       cardTheme: CardThemeData(
@@ -330,86 +329,88 @@ class AppTheme {
     final baseTextColor = isDark ? Colors.white : Colors.grey[900];
     final secondaryTextColor = isDark ? Colors.white70 : Colors.grey[600];
 
-    return GoogleFonts.interTextTheme().copyWith(
-      displayLarge: GoogleFonts.inter(
+    const fontFamily = 'Inter';
+
+    return TextTheme(
+      displayLarge: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 57,
         fontWeight: FontWeight.w300,
         letterSpacing: -1.5,
-        color: baseTextColor,
         height: 1.1,
-      ),
-      displayMedium: GoogleFonts.inter(
+      ).apply(color: baseTextColor),
+      displayMedium: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 45,
         fontWeight: FontWeight.w300,
         letterSpacing: -0.5,
-        color: baseTextColor,
         height: 1.2,
-      ),
-      displaySmall: GoogleFonts.inter(
+      ).apply(color: baseTextColor),
+      displaySmall: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 36,
         fontWeight: FontWeight.w400,
-        color: baseTextColor,
         height: 1.3,
-      ),
-      headlineMedium: GoogleFonts.inter(
+      ).apply(color: baseTextColor),
+      headlineMedium: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 28,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.25,
-        color: baseTextColor,
-      ),
-      headlineSmall: GoogleFonts.inter(
+      ).apply(color: baseTextColor),
+      headlineSmall: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 24,
         fontWeight: FontWeight.w500,
-        color: baseTextColor,
-      ),
-      titleLarge: GoogleFonts.inter(
+      ).apply(color: baseTextColor),
+      titleLarge: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 20,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.15,
-        color: baseTextColor,
-      ),
-      titleMedium: GoogleFonts.inter(
+      ).apply(color: baseTextColor),
+      titleMedium: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 16,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.15,
-        color: baseTextColor,
-      ),
-      titleSmall: GoogleFonts.inter(
+      ).apply(color: baseTextColor),
+      titleSmall: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 14,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.1,
-        color: baseTextColor,
-      ),
-      bodyLarge: GoogleFonts.inter(
+      ).apply(color: baseTextColor),
+      bodyLarge: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 16,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.5,
-        color: baseTextColor,
-      ),
-      bodyMedium: GoogleFonts.inter(
+      ).apply(color: baseTextColor),
+      bodyMedium: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 14,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.25,
-        color: secondaryTextColor,
-      ),
-      bodySmall: GoogleFonts.inter(
+      ).apply(color: secondaryTextColor),
+      bodySmall: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 12,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.4,
-        color: secondaryTextColor,
-      ),
-      labelLarge: GoogleFonts.inter(
+      ).apply(color: secondaryTextColor),
+      labelLarge: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 14,
         fontWeight: FontWeight.w600,
         letterSpacing: 1.25,
-        color: baseTextColor,
-      ),
-      labelSmall: GoogleFonts.inter(
+      ).apply(color: baseTextColor),
+      labelSmall: const TextStyle(
+        fontFamily: fontFamily,
         fontSize: 11,
         fontWeight: FontWeight.w500,
         letterSpacing: 1.5,
-        color: secondaryTextColor,
-      ),
+      ).apply(color: secondaryTextColor),
     );
   }
 }

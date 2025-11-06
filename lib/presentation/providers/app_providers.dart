@@ -1,8 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/services/api_service.dart';
 import '../../data/services/firebase_auth_service.dart';
+import '../../data/models/user_profile_dto.dart';
+import '../../data/models/territory_dto.dart';
+import '../../data/models/run_dto.dart';
 import '../../core/map_icons.dart';
 import '../../domain/services/storage_service.dart';
 
@@ -14,10 +18,43 @@ export 'settings_provider.dart' show settingsProvider;
 enum AppThemeMode { system, light, dark }
 
 class ThemeModeNotifier extends Notifier<AppThemeMode> {
+  static const String _storageKey = 'app_theme_mode';
+  
   @override
-  AppThemeMode build() => AppThemeMode.system;
+  AppThemeMode build() {
+    // Cargar tema guardado
+    _loadTheme();
+    return AppThemeMode.system;
+  }
 
-  void setTheme(AppThemeMode mode) => state = mode;
+  Future<void> _loadTheme() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final themeString = prefs.getString(_storageKey);
+      
+      if (themeString != null) {
+        final theme = AppThemeMode.values.firstWhere(
+          (e) => e.name == themeString,
+          orElse: () => AppThemeMode.system,
+        );
+        state = theme;
+      }
+    } catch (e) {
+      // Si falla, mantener default
+    }
+  }
+
+  Future<void> setTheme(AppThemeMode mode) async {
+    state = mode;
+    
+    // Guardar en SharedPreferences
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_storageKey, mode.name);
+    } catch (e) {
+      // Error saving theme
+    }
+  }
 }
 
 enum MapVisualStyle { automatic, light, dark, off }
@@ -143,6 +180,11 @@ final apiServiceProvider = Provider<ApiService>((ref) {
   return service;
 });
 
+final apiHealthProvider = FutureProvider.autoDispose<bool>((ref) async {
+  final api = ref.watch(apiServiceProvider);
+  return api.health();
+});
+
 final storageServiceProvider = Provider<StorageService>((ref) {
   return StorageService();
 });
@@ -192,12 +234,11 @@ final mapIconsProvider = FutureProvider<MapIconsBundle>((ref) async {
 /// Métodos para cambiar estados (usaremos Consumer widgets en lugar de notifiers)
 /// Estos proveedores servirán para lectura, y manejaremos los cambios directamente en los widgets
 
-/// Perfil de usuario (Firestore: users/{uid})
-final userProfileDocProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+final userProfileDtoProvider = FutureProvider.autoDispose<UserProfileDto?>((ref) async {
   final user = ref.watch(currentFirebaseUserProvider);
   if (user == null) return null;
   final api = ref.watch(apiServiceProvider);
-  return api.fetchUserProfile(user.uid);
+  return api.fetchUserProfileDto(user.uid);
 });
 
 /// Verifica si el usuario tiene un perfil completo
@@ -205,13 +246,13 @@ final hasCompleteProfileProvider = Provider<bool>((ref) {
   final user = ref.watch(currentFirebaseUserProvider);
   if (user == null) return false;
 
-  final profileAsync = ref.watch(userProfileDocProvider);
+  final profileAsync = ref.watch(userProfileDtoProvider);
   return profileAsync.when(
-    data: (profile) {
-      if (profile == null || profile.isEmpty) return false;
-      // Consideramos completo si tiene un nombre de usuario y una fecha de nacimiento
-      return (profile['displayName'] as String? ?? '').isNotEmpty && 
-             (profile['birthDate'] as String? ?? '').isNotEmpty;
+    data: (dto) {
+      if (dto == null) return false;
+      final hasName = (dto.displayName ?? '').trim().isNotEmpty;
+      final hasBirth = dto.birthDate != null;
+      return hasName && hasBirth;
     },
     loading: () => false, // Devuelve false mientras carga para evitar falsos positivos
     error: (_, __) => false,
@@ -219,30 +260,25 @@ final hasCompleteProfileProvider = Provider<bool>((ref) {
 });
 
 
-/// Territorio del usuario (Firestore: territory/{uid})
-final userTerritoryDocProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+final userTerritoryDtoProvider = FutureProvider.autoDispose<TerritoryDto?>((ref) async {
   final user = ref.watch(currentFirebaseUserProvider);
   if (user == null) return null;
   final api = ref.watch(apiServiceProvider);
-  return api.fetchTerritory(user.uid);
+  return api.fetchTerritoryDto(user.uid);
 });
 
-/// Últimas carreras del usuario (Firestore: runs, filtrado por userId)
-final userRunsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+final userRunsDtoProvider = FutureProvider.autoDispose<List<RunDto>>((ref) async {
   final user = ref.watch(currentFirebaseUserProvider);
-  if (user == null) return const [];
+  if (user == null) return const <RunDto>[];
   final api = ref.watch(apiServiceProvider);
-  return api.fetchRuns(limit: 50);
+  return api.fetchRunsDto(limit: 50);
 });
 
-/// Documento de run por id (Firestore: runs/{id})
-/// Con keepAlive para mantener en cache los runs ya cargados
-final runDocProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, id) async {
+final runDocDtoProvider = FutureProvider.family<RunDto?, String>((ref, id) async {
   // Mantener en cache para evitar recargas
   ref.keepAlive();
-  
   final api = ref.watch(apiServiceProvider);
-  return api.fetchRun(id);
+  return api.fetchRunDto(id);
 });
 
 class MapTypeNotifier extends Notifier<MapType> {

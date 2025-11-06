@@ -32,6 +32,12 @@ class AppSettings {
   final bool shareLocationLive;
   final bool allowAnalytics;
   
+  // Filtro de hogar
+  final bool homeFilterEnabled;
+  final double? homeLatitude;
+  final double? homeLongitude;
+  final double homeRadiusMeters;  // Radio en metros (50-500m)
+  
   const AppSettings({
     // Defaults
     this.language = 'es',
@@ -54,6 +60,10 @@ class AppSettings {
     this.publicProfile = false,
     this.shareLocationLive = false,
     this.allowAnalytics = true,
+    this.homeFilterEnabled = false,
+    this.homeLatitude,
+    this.homeLongitude,
+    this.homeRadiusMeters = 100.0,
   });
 
   /// Crear desde JSON (SharedPreferences)
@@ -79,6 +89,10 @@ class AppSettings {
       publicProfile: json['publicProfile'] as bool? ?? false,
       shareLocationLive: json['shareLocationLive'] as bool? ?? false,
       allowAnalytics: json['allowAnalytics'] as bool? ?? true,
+      homeFilterEnabled: json['homeFilterEnabled'] as bool? ?? false,
+      homeLatitude: (json['homeLatitude'] as num?)?.toDouble(),
+      homeLongitude: (json['homeLongitude'] as num?)?.toDouble(),
+      homeRadiusMeters: (json['homeRadiusMeters'] as num?)?.toDouble() ?? 100.0,
     );
   }
 
@@ -105,6 +119,10 @@ class AppSettings {
       'publicProfile': publicProfile,
       'shareLocationLive': shareLocationLive,
       'allowAnalytics': allowAnalytics,
+      'homeFilterEnabled': homeFilterEnabled,
+      'homeLatitude': homeLatitude,
+      'homeLongitude': homeLongitude,
+      'homeRadiusMeters': homeRadiusMeters,
     };
   }
 
@@ -130,6 +148,10 @@ class AppSettings {
     bool? publicProfile,
     bool? shareLocationLive,
     bool? allowAnalytics,
+    bool? homeFilterEnabled,
+    double? homeLatitude,
+    double? homeLongitude,
+    double? homeRadiusMeters,
   }) {
     return AppSettings(
       language: language ?? this.language,
@@ -152,6 +174,10 @@ class AppSettings {
       publicProfile: publicProfile ?? this.publicProfile,
       shareLocationLive: shareLocationLive ?? this.shareLocationLive,
       allowAnalytics: allowAnalytics ?? this.allowAnalytics,
+      homeFilterEnabled: homeFilterEnabled ?? this.homeFilterEnabled,
+      homeLatitude: homeLatitude ?? this.homeLatitude,
+      homeLongitude: homeLongitude ?? this.homeLongitude,
+      homeRadiusMeters: homeRadiusMeters ?? this.homeRadiusMeters,
     );
   }
 

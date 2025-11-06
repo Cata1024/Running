@@ -1,3 +1,5 @@
+import '../../../../data/models/user_profile_dto.dart';
+
 class ProfileViewModel {
   final String displayName;
   final String? email;
@@ -85,6 +87,47 @@ class ProfileViewModel {
       experience: experience,
       currentLevelExperience: currentLevelExperience,
       nextLevelExperience: nextLevelExperience,
+      lastActivityAt: lastActivityAt,
+      goalDescription: goalDescription,
+    );
+  }
+
+  factory ProfileViewModel.fromDto({
+    required UserProfileDto? dto,
+    String? fallbackName,
+    String? fallbackEmail,
+    String? fallbackPhotoUrl,
+  }) {
+    final displayName = (dto?.displayName) ?? fallbackName ?? 'Runner';
+    final email = dto?.email ?? fallbackEmail;
+    final photoUrl = dto?.photoUrl ?? fallbackPhotoUrl;
+    final totalRuns = dto?.totalRuns ?? 0;
+    final totalDistance = dto?.totalDistance ?? 0.0;
+    final totalTime = dto?.totalTime ?? 0;
+    final level = dto?.level ?? 1;
+    final experience = (dto?.experience ?? 0).toDouble();
+    final lastActivityAt = dto?.lastActivityAt;
+    final goalDescription = dto?.goalDescription;
+
+    return ProfileViewModel(
+      displayName: displayName,
+      email: email,
+      initials: _deriveInitials(displayName),
+      photoUrl: photoUrl,
+      totalRuns: totalRuns,
+      totalDistanceKm: totalDistance,
+      totalTimeSeconds: totalTime,
+      streak: 0,
+      level: level,
+      levelProgress: _computeLevelProgress(
+        level: level,
+        experience: experience,
+        currentLevelExperience: null,
+        nextLevelExperience: null,
+      ),
+      experience: experience,
+      currentLevelExperience: null,
+      nextLevelExperience: null,
       lastActivityAt: lastActivityAt,
       goalDescription: goalDescription,
     );

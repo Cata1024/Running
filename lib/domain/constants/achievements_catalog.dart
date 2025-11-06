@@ -419,49 +419,49 @@ class AchievementsCatalog {
   /// Obtener categorías de logros
   static List<AchievementCategory> getCategories() {
     return [
-      AchievementCategory(
+      const AchievementCategory(
         id: 'distance',
         name: 'Distancia',
         icon: '🏃',
         achievements: distanceAchievements,
       ),
-      AchievementCategory(
+      const AchievementCategory(
         id: 'runs',
         name: 'Carreras',
         icon: '🎯',
         achievements: runsAchievements,
       ),
-      AchievementCategory(
+      const AchievementCategory(
         id: 'streak',
         name: 'Rachas',
         icon: '🔥',
         achievements: streakAchievements,
       ),
-      AchievementCategory(
+      const AchievementCategory(
         id: 'speed',
         name: 'Velocidad',
         icon: '⚡',
         achievements: speedAchievements,
       ),
-      AchievementCategory(
+      const AchievementCategory(
         id: 'territory',
         name: 'Territorio',
         icon: '🗺️',
         achievements: territoryAchievements,
       ),
-      AchievementCategory(
+      const AchievementCategory(
         id: 'milestone',
         name: 'Hitos',
         icon: '🏆',
         achievements: milestoneAchievements,
       ),
-      AchievementCategory(
+      const AchievementCategory(
         id: 'social',
         name: 'Social',
         icon: '👥',
         achievements: socialAchievements,
       ),
-      AchievementCategory(
+      const AchievementCategory(
         id: 'challenge',
         name: 'Desafíos',
         icon: '💪',

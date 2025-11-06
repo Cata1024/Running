@@ -7,6 +7,7 @@ import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/widgets/aero_widgets.dart';
 import '../../../domain/services/firebase_enterprise_service.dart';
 import '../../providers/settings_provider.dart';
+import 'home_filter_settings_screen.dart';
 
 class PrivacySettingsScreen extends ConsumerWidget {
   const PrivacySettingsScreen({super.key});
@@ -162,6 +163,37 @@ class PrivacySettingsScreen extends ConsumerWidget {
                     } else {
                       ref.read(settingsProvider.notifier).setShareLocationLive(false);
                     }
+                  },
+                ),
+                const Divider(height: 32),
+                // Filtro de hogar
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(TerritoryTokens.space8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(TerritoryTokens.radiusMedium),
+                    ),
+                    child: Icon(
+                      Icons.home_outlined,
+                      color: theme.colorScheme.secondary,
+                    ),
+                  ),
+                  title: const Text('Filtro de Hogar'),
+                  subtitle: Text(
+                    settings.homeFilterEnabled && settings.homeLatitude != null
+                        ? 'Configurado (${settings.homeRadiusMeters.toInt()}m)'
+                        : 'Oculta tu ubicación de hogar en mapas públicos',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const HomeFilterSettingsScreen(),
+                      ),
+                    );
                   },
                 ),
               ],

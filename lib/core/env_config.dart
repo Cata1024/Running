@@ -3,12 +3,13 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 
+import '../firebase_options.dart';
 
 /// Runtime configuration sourced from `.env`.
 class EnvConfig {
   const EnvConfig._();
 
-  static final EnvConfig instance = EnvConfig._();
+  static final EnvConfig instance = const EnvConfig._();
 
   static String _get(String key) => dotenv.env[key] ?? '';
 
@@ -77,7 +78,7 @@ Future<void> initFirebase() async {
     return;
   }
 
-  final options = EnvConfig.instance.firebaseOptions();
+  final options = DefaultFirebaseOptions.currentPlatform;
   try {
     await Firebase.initializeApp(options: options);
     debugPrint('[EnvConfig] Firebase initialized with ${options.projectId}.');
@@ -86,15 +87,18 @@ Future<void> initFirebase() async {
     // Debug mode: usa debug provider
     // Release mode: usa Play Integrity (Android) / Device Check (iOS)
     try {
+      final androidProvider = kDebugMode
+          ? const AndroidDebugProvider()
+          : const AndroidPlayIntegrityProvider();
+      final appleProvider = kDebugMode
+          ? const AppleDebugProvider()
+          : const AppleDeviceCheckProvider();
+
       await FirebaseAppCheck.instance.activate(
-        androidProvider: kDebugMode 
-            ? AndroidProvider.debug 
-            : AndroidProvider.playIntegrity,
-        appleProvider: kDebugMode 
-            ? AppleProvider.debug 
-            : AppleProvider.deviceCheck,
+        providerAndroid: androidProvider,
+        providerApple: appleProvider,
       );
-      debugPrint('[EnvConfig] Firebase App Check activated (${kDebugMode ? "debug" : "production"} mode).');
+      debugPrint('[EnvConfig] Firebase App Check activated (Play Integrity / Device Check).');
     } catch (e) {
       debugPrint('[EnvConfig] App Check activation failed (non-critical): $e');
     }

@@ -36,7 +36,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final initState = ref.watch(achievementsInitializationProvider);
+    final initState = ref.watch(achievementsUseCaseProvider);
 
     return Scaffold(
       body: Container(
@@ -84,7 +84,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen>
                     child: ErrorState(
                       message: 'Error cargando logros',
                       onRetry: () =>
-                          ref.refresh(achievementsInitializationProvider),
+                          ref.refresh(achievementsUseCaseProvider),
                     ),
                   ),
                 ),

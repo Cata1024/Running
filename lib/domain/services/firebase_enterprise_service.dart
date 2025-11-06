@@ -6,7 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 class FirebaseEnterpriseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  final FirebaseFunctions _functions =
+      FirebaseFunctions.instanceFor(region: 'southamerica-west1');
 
   /// Exporta todos los datos del usuario usando Cloud Function
   /// Retorna un Map con 'downloadUrl' y 'fileSize'

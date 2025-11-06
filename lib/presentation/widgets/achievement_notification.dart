@@ -302,7 +302,7 @@ class _AchievementNotificationOverlayState
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.stars,
                           color: Colors.amber,
                           size: 24,

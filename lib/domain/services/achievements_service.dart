@@ -367,7 +367,7 @@ class AchievementsService {
     if (runTime.hour < 6) {
       final earlyBird = _userAchievements.firstWhere(
         (a) => a.id == 'early_bird' && !a.isUnlocked,
-        orElse: () => Achievement(
+        orElse: () => const Achievement(
           id: '',
           title: '',
           description: '',
@@ -394,7 +394,7 @@ class AchievementsService {
     if (runTime.hour >= 21) {
       final nightRunner = _userAchievements.firstWhere(
         (a) => a.id == 'night_runner' && !a.isUnlocked,
-        orElse: () => Achievement(
+        orElse: () => const Achievement(
           id: '',
           title: '',
           description: '',
@@ -421,7 +421,7 @@ class AchievementsService {
     if (run.distanceMeters >= 5000 && run.durationSeconds < 1800) {
       final challenge5k = _userAchievements.firstWhere(
         (a) => a.id == 'challenge_5k_under_30' && !a.isUnlocked,
-        orElse: () => Achievement(
+        orElse: () => const Achievement(
           id: '',
           title: '',
           description: '',

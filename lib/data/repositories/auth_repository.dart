@@ -11,13 +11,39 @@ import 'package:dartz/dartz.dart';
 /// Implementación del repositorio de autenticación usando Firebase
 class AuthRepository implements IAuthRepository {
   final FirebaseAuth _auth;
-  final GoogleSignIn _googleSignIn;
-  
+  static Future<void>? _googleInitialization;
+  static const String _googleServerClientId =
+      '28475506464-fak9o969p6igi6mp1l8et45ru6usrm1p.apps.googleusercontent.com';
+
   AuthRepository({
     FirebaseAuth? auth,
-    GoogleSignIn? googleSignIn,
-  }) : _auth = auth ?? FirebaseAuth.instance,
-       _googleSignIn = googleSignIn ?? GoogleSignIn();
+  }) : _auth = auth ?? FirebaseAuth.instance;
+
+  Future<void> _ensureGoogleInitialized() {
+    final existing = _googleInitialization;
+    if (existing != null) {
+      return existing;
+    }
+    final initialization = GoogleSignIn.instance.initialize(
+      serverClientId: _googleServerClientId,
+    );
+    _googleInitialization = initialization;
+    return initialization;
+  }
+
+  Future<GoogleSignInAccount?> _authenticateWithGoogle() async {
+    await _ensureGoogleInitialized();
+    try {
+      return await GoogleSignIn.instance.authenticate(
+        scopeHint: const <String>['email'],
+      );
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        return null;
+      }
+      rethrow;
+    }
+  }
 
   @override
   Stream<AppUser?> get authStateChanges {
@@ -159,13 +185,12 @@ class AuthRepository implements IAuthRepository {
               ..setCustomParameters({'prompt': 'select_account'});
             credential = await _auth.signInWithPopup(googleProvider);
           } else {
-            final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+            final GoogleSignInAccount? googleUser = await _authenticateWithGoogle();
             if (googleUser == null) {
               return Left(AuthFailure.cancelledByUser());
             }
-            final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+            final GoogleSignInAuthentication googleAuth = googleUser.authentication;
             final authCredential = GoogleAuthProvider.credential(
-              accessToken: googleAuth.accessToken,
               idToken: googleAuth.idToken,
             );
             credential = await _auth.signInWithCredential(authCredential);
@@ -219,19 +244,15 @@ class AuthRepository implements IAuthRepository {
           ..setCustomParameters({'prompt': 'select_account'});
         credential = await _auth.signInWithPopup(googleProvider);
       } else {
-        // Mobile authentication
-        final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-        
+        final GoogleSignInAccount? googleUser = await _authenticateWithGoogle();
+
         if (googleUser == null) {
-          // El usuario canceló el login
           return Left(AuthFailure.cancelledByUser());
         }
 
-        final GoogleSignInAuthentication googleAuth = 
-            await googleUser.authentication;
+        final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
         final authCredential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
           idToken: googleAuth.idToken,
         );
 
@@ -266,7 +287,14 @@ class AuthRepository implements IAuthRepository {
     try {
       await Future.wait([
         _auth.signOut(),
-        _googleSignIn.signOut(),
+        () async {
+          try {
+            await _ensureGoogleInitialized();
+            await GoogleSignIn.instance.signOut();
+          } catch (_) {
+            // Ignore sign-out failures, user already signed out from Firebase.
+          }
+        }(),
       ]);
       return const Right(unit);
     } catch (e) {
@@ -337,7 +365,12 @@ class AuthRepository implements IAuthRepository {
       }
 
       await user.delete();
-      await _googleSignIn.signOut();
+      try {
+        await _ensureGoogleInitialized();
+        await GoogleSignIn.instance.signOut();
+      } catch (_) {
+        // Ignore sign-out failures during account deletion.
+      }
       
       return const Right(unit);
     } on FirebaseAuthException catch (e) {

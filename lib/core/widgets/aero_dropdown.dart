@@ -199,7 +199,7 @@ class _DropdownOverlay<T> extends StatelessWidget {
           CompositedTransformFollower(
             link: layerLink,
             showWhenUnlinked: false,
-            offset: Offset(0, 56), // Altura del dropdown trigger
+            offset: const Offset(0, 56), // Altura del dropdown trigger
             child: Material(
               color: Colors.transparent,
               child: Container(

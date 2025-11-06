@@ -216,7 +216,7 @@ class _LevelUpNotificationState extends State<LevelUpNotification>
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
+                                    const Icon(
                                       Icons.star,
                                       color: Colors.white,
                                       size: 20,
@@ -288,7 +288,7 @@ class _LevelUpNotificationState extends State<LevelUpNotification>
                                     vertical: 12,
                                   ),
                                 ),
-                                child: Text(
+                                child: const Text(
                                   'Continuar',
                                   style: TextStyle(
                                     color: Colors.white,

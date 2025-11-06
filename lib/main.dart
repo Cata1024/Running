@@ -1,19 +1,25 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dynamic_color/dynamic_color.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'l10n/app_localizations.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'firebase_options.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'core/env_config.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/navigation/app_router.dart';
 import 'presentation/widgets/achievement_notification.dart';
+import 'presentation/providers/app_providers.dart';
+import 'core/widgets/loading_state.dart';
+import 'core/widgets/error_state.dart';
 
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await dotenv.load(fileName: '.env');
 
   final baseApiUrl = EnvConfig.instance.backendApiUrl;
@@ -21,14 +27,23 @@ Future<void> main() async {
     throw StateError('BASE_API_URL is not set in .env');
   }
 
-  // Inicializar Firebase
-  try {
+  // Inicializar Firebase y otros servicios asíncronos
+  await runZonedGuarded(() async {
     await initFirebase();
-  } on UnsupportedError {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  }
+
+    // Crashlytics: registrar manejadores globales
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    };
+    WidgetsBinding.instance.platformDispatcher.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  }, (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+  });
+
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   await Future.wait([
     initializeDateFormatting('es'),
@@ -39,7 +54,7 @@ Future<void> main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  
+
   runApp(
     const ProviderScope(
       child: RunningApp(),
@@ -66,6 +81,8 @@ class RunningApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    final themeMode = ref.watch(themeProvider);
+    final language = ref.watch(settingsProvider.select((s) => s.language));
 
     return DynamicColorBuilder(
       builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
@@ -73,9 +90,15 @@ class RunningApp extends ConsumerWidget {
           title: 'Territory Run',
           theme: AppTheme.light(lightDynamic),
           darkTheme: AppTheme.dark(darkDynamic),
-          themeMode: ThemeMode.system,
+          themeMode: themeMode == AppThemeMode.system
+              ? ThemeMode.system
+              : themeMode == AppThemeMode.light
+                  ? ThemeMode.light
+                  : ThemeMode.dark,
+          locale: Locale(language),
           routerConfig: router,
           localizationsDelegates: const [
+            AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
@@ -86,8 +109,32 @@ class RunningApp extends ConsumerWidget {
           ],
           debugShowCheckedModeBanner: false,
           builder: (context, child) {
-            return AchievementNotificationOverlay(
-              child: child ?? const SizedBox.shrink(),
+            return Consumer(
+              builder: (context, ref, _) {
+                final health = ref.watch(apiHealthProvider);
+                return AchievementNotificationOverlay(
+                  child: health.when(
+                    data: (ok) {
+                      if (ok) return child ?? const SizedBox.shrink();
+                      return Center(
+                        child: ErrorState(
+                          message: 'No se pudo conectar con el servidor',
+                          onRetry: () => ref.invalidate(apiHealthProvider),
+                        ),
+                      );
+                    },
+                    loading: () => const Center(
+                      child: LoadingState(message: 'Verificando conexión...'),
+                    ),
+                    error: (e, st) => Center(
+                      child: ErrorState(
+                        message: 'Error de conexión',
+                        onRetry: () => ref.invalidate(apiHealthProvider),
+                      ),
+                    ),
+                  ),
+                );
+              },
             );
           },
         );

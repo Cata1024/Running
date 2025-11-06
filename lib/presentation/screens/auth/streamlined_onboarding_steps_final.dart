@@ -507,12 +507,12 @@ class Step4Ready extends ConsumerWidget {
           
           AeroButton(
             onPressed: () => _handleStart(context, ref),
-            child: Row(
+            child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('¡Comenzar mi primera carrera!'),
-                const SizedBox(width: 8),
-                const Icon(Icons.arrow_forward, size: 20),
+                Text('¡Comenzar mi primera carrera!'),
+                SizedBox(width: 8),
+                Icon(Icons.arrow_forward, size: 20),
               ],
             ),
           ),

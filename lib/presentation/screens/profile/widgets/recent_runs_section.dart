@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../data/models/run_dto.dart';
 
 import '../../../../core/design_system/territory_tokens.dart';
 import '../../../../core/widgets/aero_widgets.dart';
 
 class RecentRunsSection extends StatelessWidget {
-  final AsyncValue<List<Map<String, dynamic>>> runsAsync;
+  final AsyncValue<List<RunDto>> runsAsync;
 
   const RecentRunsSection({super.key, required this.runsAsync});
 
@@ -16,17 +17,8 @@ class RecentRunsSection extends StatelessWidget {
 
     return runsAsync.when(
       data: (runs) {
-        final sortedRuns = List<Map<String, dynamic>>.from(runs);
-        sortedRuns.sort((a, b) {
-          final aDate = _parseRunDate(a);
-          final bDate = _parseRunDate(b);
-
-          if (aDate == null && bDate == null) return 0;
-          if (aDate == null) return 1;
-          if (bDate == null) return -1;
-
-          return bDate.compareTo(aDate);
-        });
+        final sortedRuns = List<RunDto>.from(runs);
+        sortedRuns.sort((a, b) => b.startedAt.compareTo(a.startedAt));
         final recent = sortedRuns.take(3).toList();
 
         if (recent.isEmpty) {
@@ -67,7 +59,7 @@ class RecentRunsSection extends StatelessWidget {
                   enableBlur: false,
                   padding: const EdgeInsets.all(TerritoryTokens.space12),
                   onTap: () {
-                    final id = run['id'] as String?;
+                    final id = run.id;
                     if (id != null && id.isNotEmpty) {
                       context.go('/history/detail', extra: id);
                     }
@@ -93,16 +85,11 @@ class RecentRunsSection extends StatelessWidget {
     );
   }
 
-  DateTime? _parseRunDate(Map<String, dynamic> run) {
-    final startAtRaw =
-        (run['startedAt'] as String?) ?? (run['startAt'] as String?);
-    if (startAtRaw == null) return null;
-    return DateTime.tryParse(startAtRaw);
-  }
+  
 }
 
 class _RunSummaryTile extends StatelessWidget {
-  final Map<String, dynamic> run;
+  final RunDto run;
 
   const _RunSummaryTile({required this.run});
 
@@ -157,9 +144,9 @@ class _RunSummaryTile extends StatelessWidget {
     );
   }
 
-  _RunSummaryData _resolveRunData(Map<String, dynamic> run) {
+  _RunSummaryData _resolveRunData(RunDto run) {
     final title = _resolveRunTitle(run);
-    final startedAt = _parseRunDate(run);
+    final startedAt = run.startedAt;
 
     final distanceKm = _resolveDistanceKm(run);
     final paceValue = _resolvePaceSeconds(run, distanceKm);
@@ -167,20 +154,19 @@ class _RunSummaryTile extends StatelessWidget {
 
     return _RunSummaryData(
       title: title,
-      subtitle:
-          startedAt != null ? _formatDate(startedAt) : 'Fecha desconocida',
+      subtitle: _formatDate(startedAt),
       distanceKm: distanceKm.toStringAsFixed(2),
       pace: pace,
     );
   }
 
-  String _resolveRunTitle(Map<String, dynamic> run) {
-    final explicitTitle = run['title'] as String?;
+  String _resolveRunTitle(RunDto run) {
+    final explicitTitle = run.metrics?['title'] as String?;
     if (explicitTitle != null && explicitTitle.trim().isNotEmpty) {
       return explicitTitle;
     }
 
-    final terrain = (run['conditions'] as Map<String, dynamic>?)?['terrain'];
+    final terrain = (run.conditions)?['terrain'];
     if (terrain is String && terrain.trim().isNotEmpty) {
       return terrain;
     }
@@ -188,52 +174,23 @@ class _RunSummaryTile extends StatelessWidget {
     return 'Carrera';
   }
 
-  double _resolveDistanceKm(Map<String, dynamic> run) {
-    final distanceKm = (run['distanceKm'] as num?)?.toDouble();
-    if (distanceKm != null && distanceKm > 0) {
-      return distanceKm;
-    }
-
-    final distanceM = (run['distanceM'] as num?)?.toDouble();
-    if (distanceM != null && distanceM > 0) {
-      return distanceM / 1000;
-    }
-
-    final metrics = run['metrics'] as Map<String, dynamic>?;
-    final metricsDistance = (metrics?['distanceKm'] as num?)?.toDouble();
+  double _resolveDistanceKm(RunDto run) {
+    if (run.distanceM > 0) return run.distanceM / 1000.0;
+    final metricsDistance = (run.metrics?['distanceKm'] as num?)?.toDouble();
     return metricsDistance ?? 0.0;
   }
 
-  double? _resolvePaceSeconds(Map<String, dynamic> run, double distanceKm) {
-    final paceStr = run['pace'] as String?;
-    if (paceStr != null && paceStr.contains(':')) {
-      final parts = paceStr.split(':');
-      if (parts.length >= 2) {
-        final minutes = int.tryParse(parts[0]);
-        final seconds = int.tryParse(parts[1]);
-        if (minutes != null && seconds != null) {
-          return (minutes * 60 + seconds).toDouble();
-        }
-      }
-    }
+  double? _resolvePaceSeconds(RunDto run, double distanceKm) {
+    final avg = run.avgPaceSecPerKm;
+    if (avg != null && avg > 0) return avg;
 
-    final avgPaceSecPerKm = (run['avgPaceSecPerKm'] as num?)?.toDouble();
-    if (avgPaceSecPerKm != null && avgPaceSecPerKm > 0) {
-      return avgPaceSecPerKm;
-    }
+    final metricsPace = (run.metrics?['paceSecPerKm'] as num?)?.toDouble();
+    if (metricsPace != null && metricsPace > 0) return metricsPace;
 
-    final metrics = run['metrics'] as Map<String, dynamic>?;
-    final metricsPace = (metrics?['paceSecPerKm'] as num?)?.toDouble();
-    if (metricsPace != null && metricsPace > 0) {
-      return metricsPace;
-    }
+    final durationSeconds = run.durationS.toDouble();
+    if (durationSeconds > 0 && distanceKm > 0) return durationSeconds / distanceKm;
 
-    final durationSeconds = (run['durationS'] as num?)?.toDouble();
-    if (durationSeconds != null && durationSeconds > 0 && distanceKm > 0) {
-      return durationSeconds / distanceKm;
-    }
-
-    final metricsDuration = (metrics?['movingTimeS'] as num?)?.toDouble();
+    final metricsDuration = (run.metrics?['movingTimeS'] as num?)?.toDouble();
     if (metricsDuration != null && metricsDuration > 0 && distanceKm > 0) {
       return metricsDuration / distanceKm;
     }
@@ -255,12 +212,6 @@ class _RunSummaryTile extends StatelessWidget {
     return '$day/$month/$year';
   }
 
-  DateTime? _parseRunDate(Map<String, dynamic> run) {
-    final startAtRaw =
-        (run['startedAt'] as String?) ?? (run['startAt'] as String?);
-    if (startAtRaw == null) return null;
-    return DateTime.tryParse(startAtRaw);
-  }
 }
 
 class _RunSummaryData {

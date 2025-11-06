@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/entities/app_settings.dart';
+import '../../domain/services/notification_scheduler_service.dart';
 
 /// Provider del estado de configuraciones
 final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
@@ -120,11 +121,27 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> toggleRunReminders(bool enabled) async {
     state = state.copyWith(runRemindersEnabled: enabled);
     await _saveSettings();
+    
+    // Programar/cancelar recordatorio
+    final scheduler = NotificationSchedulerService();
+    await scheduler.scheduleRunReminder(
+      time: state.runReminderTime,
+      enabled: enabled,
+    );
   }
 
   Future<void> setRunReminderTime(String time) async {
     state = state.copyWith(runReminderTime: time);
     await _saveSettings();
+    
+    // Reprogramar si está habilitado
+    if (state.runRemindersEnabled) {
+      final scheduler = NotificationSchedulerService();
+      await scheduler.scheduleRunReminder(
+        time: time,
+        enabled: true,
+      );
+    }
   }
 
   Future<void> toggleAchievementNotifications(bool enabled) async {
@@ -135,6 +152,10 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> toggleWeeklyReport(bool enabled) async {
     state = state.copyWith(weeklyReportEnabled: enabled);
     await _saveSettings();
+    
+    // Programar/cancelar reporte semanal
+    final scheduler = NotificationSchedulerService();
+    await scheduler.scheduleWeeklyReport(enabled: enabled);
   }
 
   // ========== PRIVACIDAD ==========
@@ -151,6 +172,38 @@ class SettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setAllowAnalytics(bool allow) async {
     state = state.copyWith(allowAnalytics: allow);
+    await _saveSettings();
+  }
+
+  // ========== FILTRO DE HOGAR ==========
+  
+  Future<void> toggleHomeFilter(bool enabled) async {
+    state = state.copyWith(homeFilterEnabled: enabled);
+    await _saveSettings();
+  }
+
+  Future<void> setHomeLocation({
+    required double latitude,
+    required double longitude,
+  }) async {
+    state = state.copyWith(
+      homeLatitude: latitude,
+      homeLongitude: longitude,
+    );
+    await _saveSettings();
+  }
+
+  Future<void> setHomeRadius(double radiusMeters) async {
+    state = state.copyWith(homeRadiusMeters: radiusMeters);
+    await _saveSettings();
+  }
+
+  Future<void> clearHomeLocation() async {
+    state = state.copyWith(
+      homeFilterEnabled: false,
+      homeLatitude: null,
+      homeLongitude: null,
+    );
     await _saveSettings();
   }
 

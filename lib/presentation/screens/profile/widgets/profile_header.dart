@@ -1,30 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design_system/territory_tokens.dart';
 import 'profile_avatar.dart';
 import 'profile_view_model.dart';
+import '../../../providers/optimized_providers.dart';
 
-class ProfileHeader extends StatelessWidget {
+class ProfileHeader extends ConsumerWidget {
   final ProfileViewModel profile;
 
   const ProfileHeader({super.key, required this.profile});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final displayName = ref.watch(userDisplayNameProvider) ?? profile.displayName;
+    final photoUrl = ref.watch(userPhotoUrlProvider) ?? profile.photoUrl;
+    final lastActivity = ref.watch(userLastActivityProvider) ?? profile.lastActivityAt;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ProfileAvatar(photoUrl: profile.photoUrl, initials: profile.initials),
+        ProfileAvatar(photoUrl: photoUrl, initials: profile.initials),
         const SizedBox(width: TerritoryTokens.space16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                profile.displayName,
+                displayName,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -38,10 +43,10 @@ class ProfileHeader extends StatelessWidget {
                   ),
                 ),
               ],
-              if (profile.lastActivityAt != null) ...[
+              if (lastActivity != null) ...[
                 const SizedBox(height: TerritoryTokens.space8),
                 Text(
-                  "Última actividad: ${_formatDate(profile.lastActivityAt!)}",
+                  "Última actividad: ${_formatDate(lastActivity)}",
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

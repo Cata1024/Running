@@ -46,7 +46,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '28475506464',
     projectId: 'running-app-uni',
     authDomain: 'running-app-uni.firebaseapp.com',
-    storageBucket: 'running-app-uni.firebasestorage.app',
+    storageBucket: 'running-app-uni.appspot.com',
     measurementId: 'G-7GKEG48RPX',
   );
 
@@ -55,7 +55,7 @@ class DefaultFirebaseOptions {
     appId: '1:28475506464:android:2c5177b4c28647ee2c6145',
     messagingSenderId: '28475506464',
     projectId: 'running-app-uni',
-    storageBucket: 'running-app-uni.firebasestorage.app',
+    storageBucket: 'running-app-uni.appspot.com',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
@@ -63,7 +63,7 @@ class DefaultFirebaseOptions {
     appId: '1:28475506464:ios:5e701cdec12ee8302c6145',
     messagingSenderId: '28475506464',
     projectId: 'running-app-uni',
-    storageBucket: 'running-app-uni.firebasestorage.app',
+    storageBucket: 'running-app-uni.appspot.com',
     iosBundleId: 'com.example.running',
   );
 
@@ -72,7 +72,7 @@ class DefaultFirebaseOptions {
     appId: '1:28475506464:ios:5e701cdec12ee8302c6145',
     messagingSenderId: '28475506464',
     projectId: 'running-app-uni',
-    storageBucket: 'running-app-uni.firebasestorage.app',
+    storageBucket: 'running-app-uni.appspot.com',
     iosBundleId: 'com.example.running',
   );
 
@@ -82,7 +82,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '28475506464',
     projectId: 'running-app-uni',
     authDomain: 'running-app-uni.firebaseapp.com',
-    storageBucket: 'running-app-uni.firebasestorage.app',
+    storageBucket: 'running-app-uni.appspot.com',
     measurementId: 'G-5V28JJCBSJ',
   );
 }

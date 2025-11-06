@@ -6,6 +6,7 @@ import '../../../core/widgets/aero_button.dart';
 import '../../../core/widgets/aero_surface.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../providers/app_providers.dart';
+import '../../../data/models/user_profile_dto.dart';
 
 class CompleteProfileScreen extends ConsumerStatefulWidget {
   const CompleteProfileScreen({super.key});
@@ -69,7 +70,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
         await ref.read(authServiceProvider).updateProfile(displayName: name);
       }
 
-      ref.invalidate(userProfileDocProvider);
+      ref.invalidate(userProfileDtoProvider);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -90,14 +91,14 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
     }
   }
 
-  void _loadProfile(Map<String, dynamic> data) {
-    final displayName = data['displayName'] as String?;
-    final gender = data['gender'] as String?;
-    final weight = _toDouble(data['weightKg']);
-    final height = _toInt(data['heightCm']);
-    final birthDate = _parseDate(data['birthDate']);
-    final experience = data['experience'];
-    final experienceLevel = data['experienceLevel'] as String? ?? _experienceFromPoints(experience);
+  void _loadProfile(UserProfileDto dto) {
+    final displayName = dto.displayName;
+    final gender = dto.gender;
+    final weight = dto.weightKg;
+    final height = dto.heightCm;
+    final birthDate = dto.birthDate;
+    final experience = dto.experience;
+    final experienceLevel = _experienceFromPoints(experience);
 
     if (displayName != null && displayName.isNotEmpty) {
       _nameController.text = displayName;
@@ -115,28 +116,7 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
     _selectedExperience = experienceLevel;
   }
 
-  static double? _toDouble(dynamic value) {
-    if (value is num) return value.toDouble();
-    if (value is String) return double.tryParse(value);
-    return null;
-  }
-
-  static int? _toInt(dynamic value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value);
-    return null;
-  }
-
-  static DateTime? _parseDate(dynamic value) {
-    if (value is String) {
-      return DateTime.tryParse(value);
-    }
-    if (value is Map && value['date'] is String) {
-      return DateTime.tryParse(value['date'] as String);
-    }
-    return null;
-  }
+  
 
   static String _formatNumber(double value) {
     final isInteger = value % 1 == 0;
@@ -199,15 +179,15 @@ class _CompleteProfileScreenState extends ConsumerState<CompleteProfileScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final navBarHeight = ref.watch(navBarHeightProvider);
-    final profileAsync = ref.watch(userProfileDocProvider);
+    final profileAsync = ref.watch(userProfileDtoProvider);
 
     profileAsync.when(
-      data: (data) {
-        if (!_initializedFromProfile && data != null) {
+      data: (dto) {
+        if (!_initializedFromProfile && dto != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             setState(() {
-              _loadProfile(data);
+              _loadProfile(dto);
               _initializedFromProfile = true;
             });
           });

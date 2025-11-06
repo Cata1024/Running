@@ -1,29 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../../../../core/design_system/territory_tokens.dart';
 import '../../../../core/widgets/aero_widgets.dart';
 import '../../../../domain/constants/level_system.dart';
 import 'profile_view_model.dart';
+import '../../../providers/optimized_providers.dart';
 
-class LevelSection extends StatelessWidget {
+class LevelSection extends ConsumerWidget {
   final ProfileViewModel profile;
 
   const LevelSection({super.key, required this.profile});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final progress = profile.levelProgress.clamp(0.0, 1.0);
-    
-    // Calcular XP y nivel con el nuevo sistema
-    final currentLevel = profile.level;
-    final currentXP = profile.xp;
+
+    // Nivel y XP desde providers optimizados (fallback al VM)
+    final currentLevel = ref.watch(userLevelProvider);
+    final currentXP = ref.watch(userExperienceProvider) ?? profile.xp;
+
+    // Calcular progreso a partir de XP y umbrales
     final xpForCurrentLevel = LevelSystem.totalXpForLevel(currentLevel);
     final xpForNextLevel = LevelSystem.totalXpForLevel(currentLevel + 1);
     final xpInCurrentLevel = currentXP - xpForCurrentLevel;
     final xpNeededForNext = xpForNextLevel - xpForCurrentLevel;
     final xpToNext = xpForNextLevel - currentXP;
+    final progress = (
+      xpNeededForNext > 0 ? (xpInCurrentLevel / xpNeededForNext) : 0.0
+    ).clamp(0.0, 1.0);
     
     final levelTitle = LevelSystem.getLevelTitle(currentLevel);
     final levelColor = Color(

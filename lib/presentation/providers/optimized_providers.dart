@@ -3,55 +3,89 @@ import 'app_providers.dart';
 
 /// Optimizaciones de Riverpod con .select() para reducir rebuilds
 
-/// En lugar de:
-/// final profile = ref.watch(userProfileDocProvider);
+/// En lugar de observar el perfil completo con:
+/// final profile = ref.watch(userProfileDtoProvider);
 /// 
 /// Usa .select() cuando solo necesitas un campo específico:
 /// final displayName = ref.watch(
-///   userProfileDocProvider.select((profile) => profile.value?['displayName'])
+///   userProfileDtoProvider.select((async) => async.maybeWhen(
+///     data: (dto) => dto?.displayName,
+///     orElse: () => null,
+///   ))
 /// );
 
 /// Provider optimizado para solo escuchar el displayName
 final userDisplayNameProvider = Provider<String?>((ref) {
-  final profileAsync = ref.watch(userProfileDocProvider);
-  return profileAsync.maybeWhen(
-    data: (data) => data?['displayName'] as String?,
-    orElse: () => null,
-  );
+  return ref.watch(userProfileDtoProvider.select((async) => async.maybeWhen(
+        data: (dto) => dto?.displayName,
+        orElse: () => null,
+      )));
 });
 
 /// Provider optimizado para solo escuchar el nivel del usuario
 final userLevelProvider = Provider<int>((ref) {
-  final profileAsync = ref.watch(userProfileDocProvider);
-  return profileAsync.maybeWhen(
-    data: (data) => (data?['level'] as num?)?.toInt() ?? 1,
-    orElse: () => 1,
-  );
+  return ref.watch(userProfileDtoProvider.select((async) => async.maybeWhen(
+        data: (dto) => dto?.level ?? 1,
+        orElse: () => 1,
+      )));
 });
 
 /// Provider optimizado para solo escuchar el total de runs
 final userTotalRunsProvider = Provider<int>((ref) {
-  final profileAsync = ref.watch(userProfileDocProvider);
-  return profileAsync.maybeWhen(
-    data: (data) => (data?['totalRuns'] as num?)?.toInt() ?? 0,
-    orElse: () => 0,
-  );
+  return ref.watch(userProfileDtoProvider.select((async) => async.maybeWhen(
+        data: (dto) => dto?.totalRuns ?? 0,
+        orElse: () => 0,
+      )));
 });
 
 /// Provider optimizado para el conteo de runs (sin rebuild cuando cambia la lista completa)
 final userRunsCountProvider = Provider<int>((ref) {
-  final runsAsync = ref.watch(userRunsProvider);
-  return runsAsync.maybeWhen(
-    data: (runs) => runs.length,
-    orElse: () => 0,
-  );
+  return ref.watch(userRunsDtoProvider.select((async) => async.maybeWhen(
+        data: (runs) => runs.length,
+        orElse: () => 0,
+      )));
+});
+
+final userPhotoUrlProvider = Provider<String?>((ref) {
+  return ref.watch(userProfileDtoProvider.select((async) => async.maybeWhen(
+        data: (dto) => dto?.photoUrl,
+        orElse: () => null,
+      )));
+});
+
+final userLastActivityProvider = Provider<DateTime?>((ref) {
+  return ref.watch(userProfileDtoProvider.select((async) => async.maybeWhen(
+        data: (dto) => dto?.lastActivityAt,
+        orElse: () => null,
+      )));
+});
+
+final userTotalDistanceProvider = Provider<double?>((ref) {
+  return ref.watch(userProfileDtoProvider.select((async) => async.maybeWhen(
+        data: (dto) => dto?.totalDistance,
+        orElse: () => null,
+      )));
+});
+
+final userTotalTimeProvider = Provider<int?>((ref) {
+  return ref.watch(userProfileDtoProvider.select((async) => async.maybeWhen(
+        data: (dto) => dto?.totalTime,
+        orElse: () => null,
+      )));
+});
+
+final userExperienceProvider = Provider<int?>((ref) {
+  return ref.watch(userProfileDtoProvider.select((async) => async.maybeWhen(
+        data: (dto) => dto?.experience,
+        orElse: () => null,
+      )));
 });
 
 /// Ejemplo de uso en un widget:
 /// 
 /// En lugar de:
 /// ```dart
-/// final runsAsync = ref.watch(userRunsProvider);
+/// final runsAsync = ref.watch(userRunsDtoProvider);
 /// final runCount = runsAsync.maybeWhen(
 ///   data: (runs) => runs.length,
 ///   orElse: () => 0,
@@ -77,8 +111,8 @@ final userRunsCountProvider = Provider<int>((ref) {
 /// ❌ MAL - Rebuilds cada vez que cualquier cosa cambia en el profile:
 /// ```dart
 /// Widget build(BuildContext context, WidgetRef ref) {
-///   final profile = ref.watch(userProfileDocProvider);
-///   final level = profile.value?['level'] ?? 1;
+///   final profile = ref.watch(userProfileDtoProvider);
+///   final level = profile.maybeWhen(data: (d) => d?.level ?? 1, orElse: () => 1);
 ///   return Text('Level: $level');
 /// }
 /// ```
@@ -95,9 +129,9 @@ final userRunsCountProvider = Provider<int>((ref) {
 /// ```dart
 /// Widget build(BuildContext context, WidgetRef ref) {
 ///   final level = ref.watch(
-///     userProfileDocProvider.select((async) => 
+///     userProfileDtoProvider.select((async) => 
 ///       async.maybeWhen(
-///         data: (data) => (data?['level'] as num?)?.toInt() ?? 1,
+///         data: (dto) => dto?.level ?? 1,
 ///         orElse: () => 1,
 ///       )
 ///     )

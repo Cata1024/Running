@@ -12,6 +12,7 @@ import '../../../core/widgets/loading_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/aero_button.dart';
 import '../../../core/services/route_processor.dart';
+import '../../../data/models/run_dto.dart';
 
 class RunDetailScreen extends ConsumerStatefulWidget {
   final String runId;
@@ -60,7 +61,7 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final asyncRun = ref.watch(runDocProvider(widget.runId));
+    final asyncRun = ref.watch(runDocDtoProvider(widget.runId));
     final theme = Theme.of(context);
     final mapType = ref.watch(mapTypeProvider);
     final stylePref = ref.watch(mapStyleProvider);
@@ -77,15 +78,15 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
         loading: () => const LoadingState(message: 'Cargando detalles...'),
         error: (e, st) => ErrorState(
           message: 'No se pudo cargar la carrera',
-          onRetry: () => ref.invalidate(runDocProvider(widget.runId)),
+          onRetry: () => ref.invalidate(runDocDtoProvider(widget.runId)),
         ),
-        data: (data) {
-          if (data == null) {
+        data: (run) {
+          if (run == null) {
             return const Center(child: Text('Carrera no encontrada'));
           }
 
-          final route = _parseLineString(data['routeGeoJson']);
-          final polygon = _parsePolygon(data['polygonGeoJson']);
+          final route = _parseLineString(run.routeGeoJson);
+          final polygon = _parsePolygon(run.polygonGeoJson);
 
           // 🎨 PROCESAR RUTA CON PIPELINE PROFESIONAL
           if (route.isNotEmpty && _processedRoute == null && !_isProcessingRoute) {
@@ -162,8 +163,8 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
                   (bounds.northeast.longitude + bounds.southwest.longitude) / 2,
                 );
 
-          final distanceM = (data['distanceM'] as num?)?.toDouble() ?? 0.0;
-          final durationS = (data['durationS'] as num?)?.toInt() ?? 0;
+          final distanceM = (run.distanceM).toDouble();
+          final durationS = run.durationS;
           String fmt(int s) {
             final h = (s ~/ 3600).toString().padLeft(2, '0');
             final m = ((s % 3600) ~/ 60).toString().padLeft(2, '0');
@@ -175,16 +176,14 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
           final durationLabel = fmt(durationS);
           final paceLabel = _pace(distanceM, durationS);
           final speedLabel = _speed(distanceM, durationS);
-          final areaM2 = (data['areaGainedM2'] as num?)?.toDouble();
+          final areaM2 = (run.areaGainedM2);
           final areaKm2 = areaM2 != null ? areaM2 / 1000000 : null;
-          final bool isClosedCircuit = data['isClosedCircuit'] == true;
-          final weatherData = data['conditions']?['weather'] as Map<String, dynamic>?;
+          final bool isClosedCircuit = run.isClosedCircuit == true;
+          final weatherData = run.conditions?['weather'] as Map<String, dynamic>?;
           final weatherIcon = _getWeatherIcon(weatherData?['condition'] as String?);
-          final startedAtStr = data['startedAt'] as String?;
-          final startedAt =
-              startedAtStr != null ? DateTime.tryParse(startedAtStr) : null;
+          final startedAt = run.startedAt;
           final shareText =
-              'Mi carrera${startedAt != null ? ' del ${startedAt.year}-${startedAt.month.toString().padLeft(2, '0')}-${startedAt.day.toString().padLeft(2, '0')}' : ''}: ${(distanceM / 1000).toStringAsFixed(2)} km en $durationLabel (ritmo $paceLabel min/km)';
+              'Mi carrera del ${startedAt.year}-${startedAt.month.toString().padLeft(2, '0')}-${startedAt.day.toString().padLeft(2, '0')}: ${(distanceM / 1000).toStringAsFixed(2)} km en $durationLabel (ritmo $paceLabel min/km)';
 
           return Stack(
             children: [
@@ -219,7 +218,7 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
                       ShareParams(text: shareText),
                     ),
                     onBack: () => Navigator.of(context).maybePop(),
-                    meta: _buildHeader(data, theme),
+                    meta: _buildHeader(run, theme),
                   ),
                 ),
               ),
@@ -227,7 +226,7 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
                 alignment: Alignment.bottomCenter,
                 child: SafeArea(
                   bottom: true,
-                  minimum: EdgeInsets.only(
+                  minimum: const EdgeInsets.only(
                     left: TerritoryTokens.space16,
                     right: TerritoryTokens.space16,
                     bottom: TerritoryTokens.space12,
@@ -258,10 +257,9 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
     );
   }
 
-  static Widget _buildHeader(Map<String, dynamic> data, ThemeData theme) {
-    final startedAtStr = data['startedAt'] as String?;
-    final date = startedAtStr != null ? DateTime.tryParse(startedAtStr) : null;
-    final isClosedCircuit = data['isClosedCircuit'] == true;
+  static Widget _buildHeader(RunDto run, ThemeData theme) {
+    final date = run.startedAt;
+    final isClosedCircuit = run.isClosedCircuit == true;
     final highlightColor = theme.colorScheme.tertiary;
 
     return Row(
@@ -271,7 +269,7 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
-                date != null ? _formatHeaderDate(date) : 'Carrera',
+                _formatHeaderDate(date),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.15,

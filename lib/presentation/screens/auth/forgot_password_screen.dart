@@ -172,7 +172,7 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                       color: AppTheme.successColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(TerritoryTokens.radiusXLarge),
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.check_circle_outline,
                       size: 60,
                       color: AppTheme.successColor,

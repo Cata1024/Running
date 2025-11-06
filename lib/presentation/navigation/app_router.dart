@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -47,8 +48,8 @@ final routerProvider = Provider<GoRouter>((ref) {
   final redirectNotifier = RedirectNotifier(ref);
 
   return GoRouter(
-    initialLocation: '/',
-    debugLogDiagnostics: true, // Habilitar para depuración
+    initialLocation: '/splash',
+    debugLogDiagnostics: !kReleaseMode,
     refreshListenable: redirectNotifier,
     redirect: (context, state) {
       final isLoggedIn = ref.read(currentFirebaseUserProvider) != null;
@@ -56,10 +57,11 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final isAuthRoute = state.matchedLocation.startsWith('/auth');
       final isPublicRoute = state.matchedLocation == '/welcome';
+      final isSplash = state.matchedLocation == '/splash';
 
       if (!isLoggedIn) {
         // Si no está logueado, solo puede acceder a las rutas públicas/auth
-        return isPublicRoute || isAuthRoute ? null : '/welcome';
+        return (isPublicRoute || isAuthRoute) ? null : '/welcome';
       }
 
       // --- Usuario Logueado ---
@@ -71,7 +73,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
       
       // Si tiene perfil y está en una ruta de auth/pública, redirigir al mapa
-      if (isAuthRoute || isPublicRoute) {
+      if (isAuthRoute || isPublicRoute || isSplash) {
         return '/map';
       }
 

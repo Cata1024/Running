@@ -113,11 +113,13 @@ const allowedRunFields = [
   "polygonGeoJson",
   "areaGainedM2",
   "summaryPolyline",
+  "polyline",
   "simplification",
   "metrics",
   "conditions",
   "storage",
   "synced",
+  "processingStats",
 ];
 
 const allowedProfileFields = [
@@ -138,6 +140,8 @@ const allowedProfileFields = [
   "heightCm",
   "weightKg",
   "goalDescription",
+  "goalType",
+  "weeklyDistanceGoal",
   "synced",
   "createdAt",
   "updatedAt",
@@ -221,6 +225,9 @@ const validateRunPayload = (payload, { partial = false } = {}) => {
   if (payload.summaryPolyline !== undefined && payload.summaryPolyline !== null && typeof payload.summaryPolyline !== "string") {
     errors.push("summaryPolyline must be a string");
   }
+  if (payload.polyline !== undefined && payload.polyline !== null && typeof payload.polyline !== "string") {
+    errors.push("polyline must be a string");
+  }
   if (payload.simplification !== undefined) {
     if (!isPlainObject(payload.simplification)) {
       errors.push("simplification must be an object");
@@ -240,6 +247,21 @@ const validateRunPayload = (payload, { partial = false } = {}) => {
       ensureNumberOrNull(movingTimeS, "metrics.movingTimeS");
       ensureNumberOrNull(avgSpeedKmh, "metrics.avgSpeedKmh");
       ensureNumberOrNull(paceSecPerKm, "metrics.paceSecPerKm");
+    }
+  }
+  if (payload.processingStats !== undefined) {
+    if (!isPlainObject(payload.processingStats)) {
+      errors.push("processingStats must be an object");
+    } else {
+      const { originalPoints, processedPoints, reductionRate } = payload.processingStats;
+      const ensureNumberOrNull = (value, field) => {
+        if (value !== undefined && value !== null && !isFiniteNumber(value)) {
+          errors.push(`${field} must be a number`);
+        }
+      };
+      ensureNumberOrNull(originalPoints, "processingStats.originalPoints");
+      ensureNumberOrNull(processedPoints, "processingStats.processedPoints");
+      ensureNumberOrNull(reductionRate, "processingStats.reductionRate");
     }
   }
   if (payload.conditions !== undefined) {
@@ -336,6 +358,7 @@ const validateProfilePayload = (payload) => {
   ensureString(payload.photoUrl, "photoUrl");
   ensureString(payload.preferredUnits, "preferredUnits");
   ensureString(payload.goalDescription, "goalDescription");
+  ensureString(payload.goalType, "goalType");
   ensureString(payload.gender, "gender");
   ensureString(payload.experienceLevel, "experienceLevel");
 
@@ -346,6 +369,7 @@ const validateProfilePayload = (payload) => {
   ensureInteger(payload.totalTime, "totalTime");
   ensureNumber(payload.weightKg, "weightKg");
   ensureInteger(payload.heightCm, "heightCm");
+  ensureNumber(payload.weeklyDistanceGoal, "weeklyDistanceGoal");
 
   if (payload.achievements !== undefined) {
     if (!Array.isArray(payload.achievements) || !payload.achievements.every((item) => typeof item === "string")) {
@@ -572,6 +596,68 @@ app.get("/runs/:id", async (req, res) => {
   res.json(mapRunDocument(doc));
 });
 
+// 🌤️ Obtener clima automáticamente usando Google Weather API
+async function fetchWeatherForLocation(lat, lon) {
+  try {
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      logger.warn("GOOGLE_MAPS_API_KEY not configured");
+      return null;
+    }
+
+    // Google Weather API - Current Conditions
+    // Documentación: https://developers.google.com/maps/documentation/weather/overview
+    const weatherUrl = `https://weather.googleapis.com/v1/currentConditions:lookup?key=${apiKey}`;
+    
+    const weatherResponse = await fetch(weatherUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        location: {
+          latLng: {
+            latitude: lat,
+            longitude: lon,
+          },
+        },
+        languageCode: "es",
+        units: "METRIC",
+      }),
+    });
+
+    if (!weatherResponse.ok) {
+      logger.warn("Weather API failed:", weatherResponse.status, await weatherResponse.text());
+      return null;
+    }
+
+    const weatherData = await weatherResponse.json();
+    
+    // Extraer datos relevantes de la respuesta de Google Weather API
+    const currentConditions = weatherData.currentConditions;
+    if (!currentConditions) {
+      logger.warn("No current conditions in weather response");
+      return null;
+    }
+
+    return {
+      condition: currentConditions.weatherDescription || "Desconocido",
+      temperatureC: currentConditions.temperature?.value || null,
+      humidity: currentConditions.humidity || null,
+      windSpeed: currentConditions.windSpeed?.value || null,
+      windDirection: currentConditions.windDirection?.degrees || null,
+      uvIndex: currentConditions.uvIndex || null,
+      cloudCover: currentConditions.cloudCover || null,
+      visibility: currentConditions.visibility?.value || null,
+      source: "google-weather-api",
+      fetchedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    logger.error("Error fetching weather:", error);
+    return null;
+  }
+}
+
 app.post("/runs", async (req, res) => {
   const { uid, isServiceAccount } = getAuthContext(req);
   const invalid = ensureBodyObject(req.body);
@@ -591,6 +677,40 @@ app.post("/runs", async (req, res) => {
     createdAt: now,
     updatedAt: now,
   });
+
+  // 🌤️ NUEVO: Obtener clima automáticamente en background
+  const runId = result.insertedId;
+  const startLat = sanitized.startLat;
+  const startLon = sanitized.startLon;
+  
+  if (startLat && startLon) {
+    // Ejecutar en background (no bloquear respuesta)
+    fetchWeatherForLocation(startLat, startLon)
+      .then(async (weatherData) => {
+        if (weatherData) {
+          // Actualizar el documento con los datos del clima
+          await runsCollection.updateOne(
+            { _id: runId },
+            { 
+              $set: { 
+                "conditions.weather": {
+                  condition: weatherData.condition,
+                  temperatureC: weatherData.temperatureC,
+                  humidity: weatherData.humidity,
+                  windSpeed: weatherData.windSpeed,
+                  source: weatherData.source,
+                  fetchedAt: weatherData.fetchedAt,
+                },
+              },
+            }
+          );
+          logger.info(`Weather data added to run ${runId}`);
+        }
+      })
+      .catch((error) => {
+        logger.error(`Failed to fetch weather for run ${runId}:`, error);
+      });
+  }
 
   res.status(201).json({ id: result.insertedId.toString(), success: true });
 });
@@ -641,10 +761,86 @@ app.delete("/runs/:id", async (req, res) => {
   res.json({ success: true });
 });
 
+// ========== TERRITORY ENDPOINTS ==========
+
+ 
+
 // Error handler
 app.use((err, _req, res, _next) => {
   logger.error("Unhandled error", err);
   res.status(500).json({ error: "Server error", details: err.message });
+});
+
+// 📦 Export user data (callable)
+exports.exportUserData = functions.https.onCall(async (request) => {
+  try {
+    const callerUid = request?.auth?.uid || null;
+    if (!callerUid) {
+      throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    }
+
+    const reqUserId = request?.data?.userId;
+    const targetUid = typeof reqUserId === 'string' && reqUserId.trim().length > 0 ? reqUserId.trim() : callerUid;
+    if (targetUid !== callerUid) {
+      // Solo permitir exportar tus propios datos
+      throw new functions.https.HttpsError('permission-denied', 'Cannot export data for another user');
+    }
+
+    const usersCollection = await getCollection(collectionUsers);
+    const runsCollection = await getCollection(collectionRuns);
+    const territoryCollection = await getCollection(collectionTerritory);
+
+    const [profileDoc, runs, territoryById, territoryByUser] = await Promise.all([
+      usersCollection.findOne({ _id: targetUid }),
+      runsCollection.find({ userId: targetUid }).sort({ startedAt: -1 }).toArray(),
+      territoryCollection.findOne({ _id: targetUid }),
+      territoryCollection.findOne({ userId: targetUid }),
+    ]);
+
+    const exportPayload = {
+      userId: targetUid,
+      generatedAt: new Date().toISOString(),
+      profile: profileDoc ? toPlainObject(profileDoc) : null,
+      runs: Array.isArray(runs) ? runs.map(mapRunDocument) : [],
+      territory: territoryByUser || territoryById ? toPlainObject(territoryByUser || territoryById) : null,
+      meta: {
+        version: 1,
+        collections: {
+          users: collectionUsers,
+          runs: collectionRuns,
+          territory: collectionTerritory,
+        },
+      },
+    };
+
+    const bucket = admin.storage().bucket();
+    const filePath = `exports/${targetUid}/export-${Date.now()}.json`;
+    const file = bucket.file(filePath);
+    const jsonBuffer = Buffer.from(JSON.stringify(exportPayload));
+    await file.save(jsonBuffer, {
+      contentType: 'application/json; charset=utf-8',
+      resumable: false,
+      metadata: { cacheControl: 'no-cache' },
+    });
+
+    const expiresMs = Date.now() + 24 * 60 * 60 * 1000; // 24h
+    const [signedUrl] = await file.getSignedUrl({
+      action: 'read',
+      expires: expiresMs,
+    });
+
+    const [metadata] = await file.getMetadata();
+    return {
+      downloadUrl: signedUrl,
+      fileSize: metadata?.size || null,
+      expiresAt: new Date(expiresMs).toISOString(),
+      path: filePath,
+    };
+  } catch (error) {
+    logger.error('exportUserData failed', error);
+    if (error instanceof functions.https.HttpsError) throw error;
+    throw new functions.https.HttpsError('internal', error?.message || 'Export failed');
+  }
 });
 
 exports.api = onRequest(app);

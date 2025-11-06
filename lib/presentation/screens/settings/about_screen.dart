@@ -183,12 +183,12 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
                   ),
                 ),
                 const SizedBox(height: TerritoryTokens.space16),
-                _CreditRow(
+                const _CreditRow(
                   title: 'Desarrollo',
                   value: 'Territory Run Team',
                 ),
                 const SizedBox(height: TerritoryTokens.space8),
-                _CreditRow(
+                const _CreditRow(
                   title: 'Diseño',
                   value: 'Material Design 3',
                 ),
@@ -198,7 +198,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
                   value: 'Flutter ${_getFlutterVersion()}',
                 ),
                 const SizedBox(height: TerritoryTokens.space8),
-                _CreditRow(
+                const _CreditRow(
                   title: 'Mapas',
                   value: 'Google Maps Platform',
                 ),

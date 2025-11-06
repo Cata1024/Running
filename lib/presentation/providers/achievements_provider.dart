@@ -1,177 +1,159 @@
 import 'dart:async';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../../domain/entities/achievement.dart';
-import '../../domain/entities/run.dart';
-import '../../domain/services/achievements_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'package:running/domain/entities/achievement.dart';
+import 'package:running/domain/entities/run.dart';
+
+import '../../application/achievements/achievements_use_case.dart';
+import '../../data/repositories/achievements_repository.dart';
+import '../../domain/repositories/i_achievements_repository.dart';
 import 'app_providers.dart';
 
-/// Provider del servicio de logros
-final achievementsServiceProvider = Provider<AchievementsService>((ref) {
-  final authState = ref.watch(authStateStreamProvider);
-  
-  final user = authState.when(
-    data: (u) => u,
-    loading: () => null,
-    error: (_, __) => null,
-  );
-  
+final achievementsRepositoryProvider = Provider<IAchievementsRepository>((ref) {
+  return AchievementsRepository();
+});
+
+/// Carga el caso de uso de logros para el usuario actual.
+final achievementsUseCaseProvider =
+    FutureProvider.autoDispose<AchievementsUseCase>((ref) async {
+  final user = ref.watch(currentFirebaseUserProvider);
   if (user == null) {
-    throw Exception('Usuario no autenticado');
+    throw StateError('Usuario no autenticado');
   }
-  
-  return AchievementsService(
-    firestore: FirebaseFirestore.instance,
+
+  final repository = ref.watch(achievementsRepositoryProvider);
+  final useCase = AchievementsUseCase(
     userId: user.uid,
+    repository: repository,
+  );
+  await useCase.initialize();
+  return useCase;
+});
+
+List<Achievement> _guardAchievements(List<Achievement> achievements) =>
+    List<Achievement>.unmodifiable(achievements);
+
+List<AchievementCategory> _guardCategories(List<AchievementCategory> categories) =>
+    List<AchievementCategory>.unmodifiable(categories);
+
+final userAchievementsProvider = Provider.autoDispose<List<Achievement>>((ref) {
+  final asyncUseCase = ref.watch(achievementsUseCaseProvider);
+  return asyncUseCase.maybeWhen(
+    data: (useCase) => _guardAchievements(useCase.getUserAchievements()),
+    orElse: () => const <Achievement>[],
   );
 });
 
-/// Estado de inicialización del servicio de logros
-final achievementsInitializationProvider = FutureProvider<void>((ref) async {
-  final service = ref.watch(achievementsServiceProvider);
-  await service.initialize();
-});
-
-/// Provider para obtener todos los logros del usuario
-final userAchievementsProvider = Provider<List<Achievement>>((ref) {
-  // Asegurar que el servicio esté inicializado
-  final initState = ref.watch(achievementsInitializationProvider);
-  
-  if (initState.isLoading || initState.hasError) {
-    return [];
-  }
-  
-  final service = ref.watch(achievementsServiceProvider);
-  return service.getUserAchievements();
-});
-
-/// Provider para obtener logros por categoría
-final achievementsByCategoryProvider = Provider<List<AchievementCategory>>((ref) {
-  final initState = ref.watch(achievementsInitializationProvider);
-  
-  if (initState.isLoading || initState.hasError) {
-    return [];
-  }
-  
-  final service = ref.watch(achievementsServiceProvider);
-  return service.getAchievementsByCategory();
-});
-
-/// Provider para obtener logros desbloqueados
-final unlockedAchievementsProvider = Provider<List<Achievement>>((ref) {
-  final initState = ref.watch(achievementsInitializationProvider);
-  
-  if (initState.isLoading || initState.hasError) {
-    return [];
-  }
-  
-  final service = ref.watch(achievementsServiceProvider);
-  return service.getUnlockedAchievements();
-});
-
-/// Provider para obtener logros cercanos a completar
-final nearCompletionAchievementsProvider = Provider<List<Achievement>>((ref) {
-  final initState = ref.watch(achievementsInitializationProvider);
-  
-  if (initState.isLoading || initState.hasError) {
-    return [];
-  }
-  
-  final service = ref.watch(achievementsServiceProvider);
-  return service.getNearCompletionAchievements();
-});
-
-/// Provider para estadísticas de logros
-final achievementsStatsProvider = Provider<AchievementsStats>((ref) {
-  final initState = ref.watch(achievementsInitializationProvider);
-  
-  if (initState.isLoading || initState.hasError) {
-    return AchievementsStats.empty();
-  }
-  
-  final service = ref.watch(achievementsServiceProvider);
-  
-  return AchievementsStats(
-    totalXp: service.getTotalXp(),
-    unlockedCount: service.getUnlockedCount(),
-    totalCount: service.getUserAchievements().length,
-    completionPercentage: service.getCompletionPercentage(),
+final achievementsByCategoryProvider = Provider.autoDispose<List<AchievementCategory>>((ref) {
+  final asyncUseCase = ref.watch(achievementsUseCaseProvider);
+  return asyncUseCase.maybeWhen(
+    data: (useCase) => _guardCategories(useCase.getAchievementsByCategory()),
+    orElse: () => const <AchievementCategory>[],
   );
 });
 
-/// Provider para procesar logros después de una carrera
-final processRunAchievementsProvider = FutureProvider.family<List<Achievement>, Run>(
-  (ref, run) async {
-    final service = ref.watch(achievementsServiceProvider);
-    return await service.processRunForAchievements(run);
-  },
-);
+final unlockedAchievementsProvider = Provider.autoDispose<List<Achievement>>((ref) {
+  final asyncUseCase = ref.watch(achievementsUseCaseProvider);
+  return asyncUseCase.maybeWhen(
+    data: (useCase) => _guardAchievements(useCase.getUnlockedAchievements()),
+    orElse: () => const <Achievement>[],
+  );
+});
 
-/// Provider para desbloquear un logro social
-final unlockSocialAchievementProvider = FutureProvider.family<Achievement?, String>(
-  (ref, achievementId) async {
-    final service = ref.watch(achievementsServiceProvider);
-    return await service.unlockSocialAchievement(achievementId);
-  },
-);
+final nearCompletionAchievementsProvider = Provider.autoDispose<List<Achievement>>((ref) {
+  final asyncUseCase = ref.watch(achievementsUseCaseProvider);
+  return asyncUseCase.maybeWhen(
+    data: (useCase) =>
+        _guardAchievements(useCase.getNearCompletionAchievements()),
+    orElse: () => const <Achievement>[],
+  );
+});
 
-/// Notifier para mostrar notificaciones de logros desbloqueados
-class AchievementNotificationNotifier extends Notifier<Achievement?> {
-  Timer? _autoHideTimer;
-  
-  @override
-  Achievement? build() => null;
-  
-  void showAchievement(Achievement achievement) {
-    // Cancelar timer anterior si existe
-    _autoHideTimer?.cancel();
-    
-    state = achievement;
-    
-    // Auto-hide después de 5 segundos con Timer cancelable
-    _autoHideTimer = Timer(const Duration(seconds: 5), () {
-      if (state?.id == achievement.id) {
-        state = null;
-      }
-    });
-  }
-  
-  void hideAchievement() {
-    _autoHideTimer?.cancel();
-    state = null;
-  }
-}
-
-/// Provider para notificaciones de logros
-final achievementNotificationProvider = 
-    NotifierProvider<AchievementNotificationNotifier, Achievement?>(
-  AchievementNotificationNotifier.new,
-);
-
-/// Clase para estadísticas de logros
 class AchievementsStats {
   final int totalXp;
   final int unlockedCount;
   final int totalCount;
   final double completionPercentage;
-  
+
   const AchievementsStats({
     required this.totalXp,
     required this.unlockedCount,
     required this.totalCount,
     required this.completionPercentage,
   });
-  
-  factory AchievementsStats.empty() {
-    return const AchievementsStats(
-      totalXp: 0,
-      unlockedCount: 0,
-      totalCount: 0,
-      completionPercentage: 0.0,
-    );
-  }
-  
+
+  factory AchievementsStats.empty() => const AchievementsStats(
+        totalXp: 0,
+        unlockedCount: 0,
+        totalCount: 0,
+        completionPercentage: 0,
+      );
+
   String get completionText => '${(completionPercentage * 100).toInt()}%';
   String get progressText => '$unlockedCount/$totalCount';
+}
+
+final achievementsStatsProvider = Provider.autoDispose<AchievementsStats>((ref) {
+  final asyncUseCase = ref.watch(achievementsUseCaseProvider);
+  return asyncUseCase.maybeWhen(
+    data: (useCase) => AchievementsStats(
+      totalXp: useCase.getTotalXp(),
+      unlockedCount: useCase.getUnlockedCount(),
+      totalCount: useCase.getUserAchievements().length,
+      completionPercentage: useCase.getCompletionPercentage(),
+    ),
+    orElse: AchievementsStats.empty,
+  );
+});
+
+final achievementNotificationProvider = NotifierProvider.autoDispose<
+  AchievementNotificationNotifier,
+  Achievement?
+>(AchievementNotificationNotifier.new);
+
+class AchievementNotificationNotifier extends Notifier<Achievement?> {
+  Timer? _timer;
+
+  @override
+  Achievement? build() {
+    ref.onDispose(() {
+      _timer?.cancel();
+    });
+    return null;
+  }
+
+  void show(Achievement achievement) {
+    state = achievement;
+    _timer?.cancel();
+    _timer = Timer(const Duration(seconds: 5), hideAchievement);
+  }
+
+  void hideAchievement() {
+    state = null;
+  }
+}
+
+void showAchievement(Ref ref, Achievement achievement) {
+  ref.read(achievementNotificationProvider.notifier).show(achievement);
+}
+
+Future<void> processRunAchievements(Ref ref, Run run) async {
+  final useCase = await ref.read(achievementsUseCaseProvider.future);
+  final newAchievements = await useCase.processRunForAchievements(run);
+  for (final achievement in newAchievements) {
+    showAchievement(ref, achievement);
+  }
+  if (newAchievements.isNotEmpty) {
+    ref.invalidate(achievementsUseCaseProvider);
+  }
+}
+
+Future<void> unlockSocialAchievement(Ref ref, String achievementId) async {
+  final useCase = await ref.read(achievementsUseCaseProvider.future);
+  final achievement = await useCase.unlockSocialAchievement(achievementId);
+  if (achievement != null) {
+    showAchievement(ref, achievement);
+    ref.invalidate(achievementsUseCaseProvider);
+  }
 }

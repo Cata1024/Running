@@ -5,6 +5,9 @@ import 'package:http/http.dart' as http;
 
 import '../../core/env_config.dart';
 import '../../core/error/app_error.dart';
+import '../models/run_dto.dart';
+import '../models/user_profile_dto.dart';
+import '../models/territory_dto.dart';
 
 class ApiException extends AppError {
   final int statusCode;
@@ -239,5 +242,46 @@ class ApiService {
         originalError: e,
       );
     }
+  }
+
+  // Simple healthcheck to validate BASE_API_URL connectivity
+  Future<bool> health() async {
+    final uri = _uri('/health');
+    try {
+      final response = await _client.get(uri, headers: const {
+        'Content-Type': 'application/json',
+      });
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.isEmpty) return false;
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          return decoded['ok'] == true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  // ===== Typed helpers (DTOs) – non-breaking wrappers =====
+  Future<UserProfileDto?> fetchUserProfileDto(String uid) async {
+    final map = await fetchUserProfile(uid);
+    if (map == null) return null;
+    return UserProfileDto.fromMap(uid, map);
+  }
+
+  Future<TerritoryDto?> fetchTerritoryDto(String uid) async {
+    final map = await fetchTerritory(uid);
+    if (map == null) return null;
+    return TerritoryDto.fromMap(uid, map);
+  }
+
+  Future<List<RunDto>> fetchRunsDto({int limit = 20}) async {
+    final list = await fetchRuns(limit: limit);
+    return list.map((e) => RunDto.fromMap(e)).toList();
+  }
+
+  Future<RunDto?> fetchRunDto(String id) async {
+    final map = await fetchRun(id);
+    return map == null ? null : RunDto.fromMap(map);
   }
 }

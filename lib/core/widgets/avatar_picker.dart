@@ -302,23 +302,34 @@ class AvatarUploader {
   }) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final extension = file.path.split('.').last;
+      final ext = file.path.split('.').last.toLowerCase();
       final storageRef = FirebaseStorage.instance
           .ref()
           .child('avatars')
-          .child('${userId}_$timestamp.$extension');
-      
-      final uploadTask = storageRef.putFile(file);
+          .child(userId)
+          .child('$timestamp.$ext');
+
+      final contentType = switch (ext) {
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        'gif' => 'image/gif',
+        _ => 'image/jpeg',
+      };
+
+      final uploadTask = storageRef.putFile(
+        file,
+        SettableMetadata(contentType: contentType),
+      );
       if (onProgress != null) {
         uploadTask.snapshotEvents.listen((snapshot) {
           final progress = snapshot.bytesTransferred / snapshot.totalBytes;
           onProgress(progress);
         });
       }
-      
+
       final snapshot = await uploadTask;
       return await snapshot.ref.getDownloadURL();
-      
+
     } catch (e) {
       // En caso de error, retornar placeholder
       return 'https://ui-avatars.com/api/?name=$userId&size=200';

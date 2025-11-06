@@ -1,45 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../data/models/user_profile_dto.dart';
 import '../../../../core/design_system/territory_tokens.dart';
 import '../../../../core/widgets/aero_widgets.dart';
 
 /// Sección de información personal del perfil
 /// Muestra datos del onboarding: edad, género, peso, altura, objetivo
 class PersonalInfoSection extends ConsumerWidget {
-  final Map<String, dynamic>? profileData;
+  final UserProfileDto? profile;
   
   const PersonalInfoSection({
     super.key,
-    required this.profileData,
+    required this.profile,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     
-    if (profileData == null) {
+    if (profile == null) {
       return const SizedBox.shrink();
     }
     
     // Extraer datos
     // Manejar birthDate que puede venir como Timestamp (Firestore) o DateTime
-    DateTime? birthDate;
-    final birthDateValue = profileData!['birthDate'];
-    if (birthDateValue != null) {
-      if (birthDateValue is Timestamp) {
-        birthDate = birthDateValue.toDate();
-      } else if (birthDateValue is DateTime) {
-        birthDate = birthDateValue;
-      }
-    }
+    DateTime? birthDate = profile!.birthDate;
     
-    final gender = profileData!['gender'] as String?;
-    final weightKg = (profileData!['weightKg'] as num?)?.toDouble();
-    final heightCm = (profileData!['heightCm'] as num?)?.toInt();
-    final goalType = profileData!['goalType'] as String?;
-    final weeklyDistanceGoal = (profileData!['weeklyDistanceGoal'] as num?)?.toDouble();
+    final gender = profile!.gender;
+    final weightKg = profile!.weightKg;
+    final heightCm = profile!.heightCm;
+    final goalType = profile!.goalType;
+    final weeklyDistanceGoal = profile!.weeklyDistanceGoal;
     
     // Si no hay datos personales, no mostrar la sección
     if (birthDate == null && gender == null && weightKg == null && 

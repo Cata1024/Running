@@ -16,8 +16,8 @@ class AchievementsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     
-    // Verificar que el servicio esté inicializado antes de acceder a los datos
-    final initState = ref.watch(achievementsInitializationProvider);
+    // Verificar que el caso de uso esté inicializado antes de acceder a los datos
+    final initState = ref.watch(achievementsUseCaseProvider);
     
     // Mostrar loading o error si es necesario
     if (initState.isLoading) {

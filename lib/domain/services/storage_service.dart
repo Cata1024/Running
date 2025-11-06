@@ -1,12 +1,20 @@
 import 'dart:typed_data';
 
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import '../../core/error/exceptions.dart';
 
 class StorageService {
   StorageService({FirebaseStorage? storage})
-      : _storage = storage ?? FirebaseStorage.instance;
+      : _storage = storage ?? (() {
+          final bucket = Firebase.app().options.storageBucket;
+          if (bucket != null && bucket.isNotEmpty) {
+            final normalized = bucket.startsWith('gs://') ? bucket : 'gs://$bucket';
+            return FirebaseStorage.instanceFor(bucket: normalized);
+          }
+          return FirebaseStorage.instance;
+        })();
 
   final FirebaseStorage _storage;
 

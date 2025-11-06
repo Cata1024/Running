@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/widgets/aero_widgets.dart';
 import '../../../core/widgets/avatar_picker.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../providers/app_providers.dart';
 import 'dart:io';
 
@@ -41,32 +41,19 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   void _loadCurrentData() {
-    final profileAsync = ref.read(userProfileDocProvider);
-    profileAsync.whenData((data) {
-      if (data != null && mounted) {
-        // Manejar birthDate que puede venir como Timestamp (Firestore) o DateTime
-        DateTime? birthDate;
-        final birthDateValue = data['birthDate'];
-        if (birthDateValue != null) {
-          if (birthDateValue is Timestamp) {
-            birthDate = birthDateValue.toDate();
-          } else if (birthDateValue is DateTime) {
-            birthDate = birthDateValue;
-          }
-        }
-        
-        setState(() {
-          _nameController.text = data['displayName'] as String? ?? '';
-          _birthDate = birthDate;
-          _selectedGender = data['gender'] as String? ?? '';
-          _weight = (data['weightKg'] as num?)?.toDouble() ?? 70.0;
-          _height = (data['heightCm'] as num?)?.toInt() ?? 170;
-          _selectedGoal = data['goalType'] as String? ?? '';
-          _weeklyGoal = (data['weeklyDistanceGoal'] as num?)?.toDouble() ?? 20.0;
-          _goalDescription = data['goalDescription'] as String?;
-        });
-      }
-    });
+    final dto = ref.read(userProfileDtoProvider).value;
+    if (dto != null && mounted) {
+      setState(() {
+        _nameController.text = dto.displayName ?? '';
+        _birthDate = dto.birthDate;
+        _selectedGender = dto.gender ?? '';
+        _weight = dto.weightKg ?? 70.0;
+        _height = dto.heightCm ?? 170;
+        _selectedGoal = dto.goalType ?? '';
+        _weeklyGoal = dto.weeklyDistanceGoal ?? 20.0;
+        _goalDescription = dto.goalDescription;
+      });
+    }
     
     // Escuchar cambios
     _nameController.addListener(() => _markAsChanged());
@@ -135,7 +122,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       final updates = <String, dynamic>{
         if (newAvatarUrl != null) 'photoUrl': newAvatarUrl,
         'displayName': _nameController.text.trim(),
-        if (_birthDate != null) 'birthDate': _birthDate,
+        if (_birthDate != null) 'birthDate': _birthDate!.toIso8601String(),
         'gender': _selectedGender,
         'weightKg': _weight,
         'heightCm': _height,
@@ -143,21 +130,21 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         'weeklyDistanceGoal': _weeklyGoal,
         if (_goalDescription != null && _goalDescription!.isNotEmpty)
           'goalDescription': _goalDescription,
-        'updatedAt': DateTime.now(),
+        'updatedAt': DateTime.now().toIso8601String(),
       };
       
       // Actualizar en Firestore
       await api.updateUserProfile(user.uid, updates);
       
       // Invalidar provider para recargar
-      ref.invalidate(userProfileDocProvider);
+      ref.invalidate(userProfileDtoProvider);
       
       if (!mounted) return;
       
       // Mostrar éxito y volver
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('✅ Perfil actualizado correctamente'),
+          content: Text('✅ ${AppLocalizations.of(context).profileUpdated}'),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -173,7 +160,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error al guardar: ${e.toString()}'),
+          content: Text('❌ ${AppLocalizations.of(context).profileUpdateFailed}'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -194,7 +181,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
-              title: const Text('Editar Perfil'),
+              title: Text(AppLocalizations.of(context).editProfile),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => _confirmExit(),
@@ -209,7 +196,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Guardar'),
+                        : Text(AppLocalizations.of(context).save),
                   ),
               ],
               pinned: true,
@@ -222,7 +209,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   child: Column(
                     children: [
                       AvatarPicker(
-                        imageUrl: ref.read(userProfileDocProvider).value?['photoUrl'] as String?,
+                        imageUrl: ref.read(userProfileDtoProvider).value?.photoUrl,
                         onImageSelected: (file) {
                           setState(() {
                             _newAvatarFile = file;
@@ -235,16 +222,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       const SizedBox(height: TerritoryTokens.space24),
                       // Nombre
                       _buildSection(
-                        title: 'Información Básica',
+                        title: AppLocalizations.of(context).basicInformation,
                         children: [
                 AeroTextField(
                   controller: _nameController,
-                  label: 'Nombre completo',
-                  hint: 'Tu nombre',
+                  label: AppLocalizations.of(context).fullName,
+                  hint: AppLocalizations.of(context).yourName,
                   prefixIcon: const Icon(Icons.person_outline),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'El nombre es requerido';
+                      return AppLocalizations.of(context).nameIsRequired;
                     }
                     return null;
                   },
@@ -281,7 +268,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Fecha de nacimiento',
+                                AppLocalizations.of(context).birthDate,
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
                                 ),
@@ -289,7 +276,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 _birthDate == null
-                                    ? 'Selecciona tu fecha'
+                                    ? AppLocalizations.of(context).selectDate
                                     : '${_birthDate!.day}/${_birthDate!.month}/${_birthDate!.year}',
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
@@ -317,14 +304,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               
               // Género
               _buildSection(
-              title: 'Género',
+              title: AppLocalizations.of(context).gender,
               children: [
                 Row(
                   children: [
                     Expanded(
                       child: _GenderChip(
                         icon: Icons.male,
-                        label: 'Masculino',
+                        label: AppLocalizations.of(context).male,
                         value: 'male',
                         isSelected: _selectedGender == 'male',
                         onTap: () {
@@ -339,7 +326,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     Expanded(
                       child: _GenderChip(
                         icon: Icons.female,
-                        label: 'Femenino',
+                        label: AppLocalizations.of(context).female,
                         value: 'female',
                         isSelected: _selectedGender == 'female',
                         onTap: () {
@@ -358,7 +345,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     Expanded(
                       child: _GenderChip(
                         icon: Icons.more_horiz,
-                        label: 'Otro',
+                        label: AppLocalizations.of(context).other,
                         value: 'other',
                         isSelected: _selectedGender == 'other',
                         onTap: () {
@@ -373,7 +360,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     Expanded(
                       child: _GenderChip(
                         icon: Icons.lock_outline,
-                        label: 'Prefiero no decir',
+                        label: AppLocalizations.of(context).preferNotSay,
                         value: 'prefer_not_say',
                         isSelected: _selectedGender == 'prefer_not_say',
                         onTap: () {
@@ -393,10 +380,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               
               // Perfil Físico
               _buildSection(
-              title: 'Perfil Físico',
+              title: AppLocalizations.of(context).physicalProfile,
               children: [
                 _PhysicalStatCard(
-                  label: 'Peso',
+                  label: AppLocalizations.of(context).weight,
                   icon: Icons.monitor_weight_outlined,
                   value: _weight,
                   unit: 'kg',
@@ -412,7 +399,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 ),
                 const SizedBox(height: 16),
                 _PhysicalStatCard(
-                  label: 'Altura',
+                  label: AppLocalizations.of(context).height,
                   icon: Icons.height,
                   value: _height.toDouble(),
                   unit: 'cm',
@@ -433,12 +420,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               
               // Objetivo
               _buildSection(
-              title: 'Objetivo de Carrera',
+              title: AppLocalizations.of(context).runningGoal,
               children: [
                 _GoalOption(
                   icon: Icons.fitness_center,
-                  label: 'Fitness General',
-                  description: 'Mantenerme activo y saludable',
+                  label: AppLocalizations.of(context).fitnessGeneral,
+                  description: AppLocalizations.of(context).stayActive,
                   value: 'fitness',
                   isSelected: _selectedGoal == 'fitness',
                   onTap: () {
@@ -452,8 +439,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 const SizedBox(height: 12),
                 _GoalOption(
                   icon: Icons.trending_down,
-                  label: 'Perder Peso',
-                  description: 'Quemar calorías y adelgazar',
+                  label: AppLocalizations.of(context).weightLoss,
+                  description: AppLocalizations.of(context).loseWeight,
                   value: 'weight_loss',
                   isSelected: _selectedGoal == 'weight_loss',
                   onTap: () {
@@ -467,8 +454,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 const SizedBox(height: 12),
                 _GoalOption(
                   icon: Icons.emoji_events,
-                  label: 'Competir',
-                  description: 'Prepararme para carreras',
+                  label: AppLocalizations.of(context).competition,
+                  description: AppLocalizations.of(context).prepareForRaces,
                   value: 'competition',
                   isSelected: _selectedGoal == 'competition',
                   onTap: () {
@@ -482,8 +469,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 const SizedBox(height: 12),
                 _GoalOption(
                   icon: Icons.sentiment_satisfied_alt,
-                  label: 'Diversión',
-                  description: 'Disfrutar corriendo sin presión',
+                  label: AppLocalizations.of(context).fun,
+                  description: AppLocalizations.of(context).enjoyRunning,
                   value: 'fun',
                   isSelected: _selectedGoal == 'fun',
                   onTap: () {
@@ -501,7 +488,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               
               // Meta semanal
               _buildSection(
-              title: 'Meta Semanal',
+              title: AppLocalizations.of(context).weeklyGoal,
               children: [
                 AeroCard(
                   child: Padding(
@@ -621,23 +608,23 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('¿Descartar cambios?'),
-        content: const Text('Tienes cambios sin guardar. ¿Estás seguro de que quieres salir?'),
+      builder: (dialogContext) => AlertDialog(
+        title: Text(AppLocalizations.of(context).unsavedChanges),
+        content: Text(AppLocalizations.of(context).unsavedChangesMessage),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(AppLocalizations.of(context).cancel),
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               context.pop();
             },
             style: TextButton.styleFrom(
               foregroundColor: Colors.red,
             ),
-            child: const Text('Descartar'),
+            child: Text(AppLocalizations.of(context).discard),
           ),
         ],
       ),

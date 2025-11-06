@@ -8,7 +8,8 @@ import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/responsive/responsive_builder.dart';
 import '../../../core/widgets/aero_widgets.dart';
 import '../../../core/utils/debouncer.dart';
-import '../../providers/app_providers.dart'; // contiene userRunsProvider y historyFilterProvider
+import '../../providers/app_providers.dart'; // contiene userRunsDtoProvider y historyFilterProvider
+import '../../../data/models/run_dto.dart';
 
 class _HistorySearchQueryNotifier extends Notifier<String> {
   @override
@@ -100,6 +101,20 @@ class RunUtils {
       }
     }
     return idx;
+  }
+
+  static Map<String, dynamic> summarizeDto(List<RunDto> runs) {
+    double totalDistanceKm = 0;
+    int totalTime = 0;
+    for (final run in runs) {
+      totalDistanceKm += (run.distanceM) / 1000.0;
+      totalTime += run.durationS;
+    }
+    return {
+      'totalRuns': runs.length,
+      'totalDistanceKm': totalDistanceKm,
+      'totalTime': totalTime,
+    };
   }
 }
 
@@ -437,7 +452,7 @@ class _CompactFilterBarState extends ConsumerState<_CompactFilterBar>
           label: RunUtils.formatDateRange(filter.start, filter.end),
         ),
       if (filter.onlyClosed)
-        _SummaryChip(
+        const _SummaryChip(
           icon: Icons.check_circle,
           label: 'Circuitos cerrados',
         ),
@@ -550,34 +565,32 @@ class _FilteredRunsArgs {
 }
 
 final _filteredRunsProvider = Provider.autoDispose
-    .family<List<Map<String, dynamic>>, _FilteredRunsArgs>((ref, args) {
-  final runsAsync = ref.watch(userRunsProvider);
+    .family<List<RunDto>, _FilteredRunsArgs>((ref, args) {
+  final runsAsync = ref.watch(userRunsDtoProvider);
 
   return runsAsync.maybeWhen(
     data: (runs) {
       final query = args.query.trim().toLowerCase();
       final filtered = runs.where((run) {
-        final distanceKm =
-            ((run['distanceM'] as num?)?.toDouble() ?? 0.0) / 1000.0;
+        final metricsDistance = (run.metrics?['distanceKm'] as num?)?.toDouble();
+        final distanceKm = metricsDistance ?? (run.distanceM / 1000.0);
         final filter = args.filter;
         if (distanceKm < filter.minKm || distanceKm > filter.maxKm) {
           return false;
         }
-        if (filter.onlyClosed && run['isClosedCircuit'] != true) {
+        if (filter.onlyClosed && run.isClosedCircuit != true) {
           return false;
         }
-        final startedAtStr = run['startedAt'] as String?;
-        final startedAt =
-            startedAtStr != null ? DateTime.tryParse(startedAtStr) : null;
-        if (filter.start != null && startedAt != null) {
+        final startedAt = run.startedAt;
+        if (filter.start != null) {
           if (startedAt.isBefore(filter.start!)) return false;
         }
-        if (filter.end != null && startedAt != null) {
+        if (filter.end != null) {
           if (startedAt.isAfter(filter.end!)) return false;
         }
         if (query.isNotEmpty) {
-          final title = (run['title'] as String?)?.toLowerCase() ?? '';
-          final notes = (run['notes'] as String?)?.toLowerCase() ?? '';
+          final title = (run.metrics?['title'] as String?)?.toLowerCase() ?? '';
+          final notes = (run.metrics?['notes'] as String?)?.toLowerCase() ?? '';
           if (!title.contains(query) && !notes.contains(query)) {
             return false;
           }
@@ -585,11 +598,7 @@ final _filteredRunsProvider = Provider.autoDispose
         return true;
       }).toList();
 
-      filtered.sort((a, b) {
-        final aDate = DateTime.tryParse(a['startedAt'] ?? '') ?? DateTime(1970);
-        final bDate = DateTime.tryParse(b['startedAt'] ?? '') ?? DateTime(1970);
-        return bDate.compareTo(aDate);
-      });
+      filtered.sort((a, b) => b.startedAt.compareTo(a.startedAt));
 
       return filtered;
     },
@@ -639,10 +648,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
 
   Future<void> _refreshRuns() async {
     // Invalidar provider para forzar recarga
-    ref.invalidate(userRunsProvider);
+    ref.invalidate(userRunsDtoProvider);
 
     // Esperar a que se complete la recarga
-    await ref.read(userRunsProvider.future);
+    await ref.read(userRunsDtoProvider.future);
 
     // Resetear el contador de runs mostrados
     if (mounted) {
@@ -658,7 +667,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
     final theme = Theme.of(context);
     final filter = ref.watch(historyFilterProvider);
     final filterNotifier = ref.read(historyFilterProvider.notifier);
-    final runsAsync = ref.watch(userRunsProvider);
+    final runsAsync = ref.watch(userRunsDtoProvider);
     final navBarHeight = ref.watch(navBarHeightProvider);
     final navBarClearance = navBarHeight > TerritoryTokens.space16
         ? navBarHeight - TerritoryTokens.space16
@@ -666,7 +675,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
 
     // summary memoizado a partir del AsyncValue
     final summary = runsAsync.maybeWhen(
-      data: (runs) => RunUtils.summarize(runs),
+      data: (runs) => RunUtils.summarizeDto(runs),
       orElse: () => {
         'totalRuns': null,
         'totalDistanceKm': null,
@@ -764,7 +773,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                       horizontal: TerritoryTokens.space16,
                     ),
                     sliver: runsAsync.when(
-                      loading: () => SliverToBoxAdapter(
+                      loading: () => const SliverToBoxAdapter(
                         child: _RunsShimmerList(),
                       ),
                       error: (err, st) => SliverToBoxAdapter(
@@ -780,7 +789,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                               const SizedBox(height: TerritoryTokens.space12),
                               TextButton(
                                 onPressed: () =>
-                                    ref.invalidate(userRunsProvider),
+                                    ref.invalidate(userRunsDtoProvider),
                                 child: const Text('Reintentar'),
                               ),
                             ],
@@ -819,7 +828,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen>
                                   run: run,
                                   onTap: () => GoRouter.of(context).pushNamed(
                                       'run-detail',
-                                      extra: run['id']),
+                                      extra: run.id),
                                 ),
                               );
                             },
@@ -1126,7 +1135,7 @@ class _RunsShimmerList extends StatelessWidget {
 
 /// ---------- RunCard ----------
 class _RunCard extends StatefulWidget {
-  final Map<String, dynamic> run;
+  final RunDto run;
   final VoidCallback onTap;
 
   const _RunCard({required this.run, required this.onTap});
@@ -1143,16 +1152,13 @@ class _RunCardState extends State<_RunCard> {
     final theme = Theme.of(context);
     final run = widget.run;
 
-    final startedAtStr = run['startedAt'] as String?;
-    DateTime? startedAt;
-    if (startedAtStr != null) startedAt = DateTime.tryParse(startedAtStr);
-
-    final distanceM = (run['distanceM'] as num?)?.toDouble() ?? 0.0;
-    final durationS = (run['durationS'] as num?)?.toInt() ?? 0;
-    final isClosedCircuit = run['isClosedCircuit'] == true;
-    final routeGeoJson = run['routeGeoJson'] as Map<String, dynamic>?;
+    final startedAt = run.startedAt;
+    final distanceM = (run.distanceM).toDouble();
+    final durationS = run.durationS;
+    final isClosedCircuit = run.isClosedCircuit == true;
+    final routeGeoJson = run.routeGeoJson;
     final coordinates = routeGeoJson?['coordinates'] as List<dynamic>? ?? [];
-    final heroTag = 'run-${run['id']}';
+    final heroTag = 'run-${run.id}';
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -1267,9 +1273,7 @@ class _RunCardState extends State<_RunCard> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    startedAt != null
-                                        ? '${RunUtils.formatWeekday(startedAt)} • ${RunUtils.formatDate(startedAt)} • ${RunUtils.formatTime(startedAt)}'
-                                        : 'Fecha no disponible',
+                                    '${RunUtils.formatWeekday(startedAt)} • ${RunUtils.formatDate(startedAt)} • ${RunUtils.formatTime(startedAt)}',
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       fontWeight: FontWeight.w600,
                                       color: theme.colorScheme.onSurface,

@@ -95,7 +95,7 @@ class ImprovedEmptyState extends StatelessWidget {
               
               FilledButton.icon(
                 onPressed: onAction,
-                icon: Icon(Icons.add),
+                icon: const Icon(Icons.add),
                 label: Text(actionLabel!),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(

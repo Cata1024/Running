@@ -33,24 +33,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
   Future<void> _refreshProfile() async {
     // Invalidar los providers para forzar recarga
-    ref.invalidate(userProfileDocProvider);
-    ref.invalidate(userTerritoryDocProvider);
-    ref.invalidate(userRunsProvider);
+    ref.invalidate(userProfileDtoProvider);
+    ref.invalidate(userTerritoryDtoProvider);
+    ref.invalidate(userRunsDtoProvider);
 
     // Esperar a que se complete la recarga
     await Future.wait([
-      ref.read(userProfileDocProvider.future),
-      ref.read(userTerritoryDocProvider.future),
-      ref.read(userRunsProvider.future),
+      ref.read(userProfileDtoProvider.future),
+      ref.read(userTerritoryDtoProvider.future),
+      ref.read(userRunsDtoProvider.future),
     ]);
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final profileAsync = ref.watch(userProfileDocProvider);
-    final territoryAsync = ref.watch(userTerritoryDocProvider);
-    final runsAsync = ref.watch(userRunsProvider);
+    final profileAsync = ref.watch(userProfileDtoProvider);
+    final territoryAsync = ref.watch(userTerritoryDtoProvider);
+    final runsAsync = ref.watch(userRunsDtoProvider);
     final currentUser = ref.watch(currentFirebaseUserProvider);
     final theme = Theme.of(context);
     final navBarHeight = ref.watch(navBarHeightProvider);
@@ -71,9 +71,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ),
           SafeArea(
             child: profileAsync.when(
-              data: (profileData) {
-                final viewModel = ProfileViewModel.fromSources(
-                  data: profileData,
+              data: (profileDto) {
+                final viewModel = ProfileViewModel.fromDto(
+                  dto: profileDto,
                   fallbackName: currentUser?.displayName,
                   fallbackEmail: currentUser?.email,
                   fallbackPhotoUrl: currentUser?.photoURL,
@@ -106,7 +106,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                               const SizedBox(height: TerritoryTokens.space24),
                               const AchievementsSection(),
                               const SizedBox(height: TerritoryTokens.space24),
-                              PersonalInfoSection(profileData: profileData),
+                              PersonalInfoSection(profile: profileDto),
                               if (viewModel.goalDescription != null &&
                                   viewModel.goalDescription!.isNotEmpty) ...[
                                 const SizedBox(height: TerritoryTokens.space24),
@@ -159,7 +159,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       ),
                       SliverToBoxAdapter(
                         child: SizedBox(
-                          height: navBarClearance,
+                          height: navBarClearance + TerritoryTokens.space24,
                         ),
                       ),
                     ],

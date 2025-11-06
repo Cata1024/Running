@@ -128,21 +128,21 @@ class AeroSurface extends StatelessWidget {
   _AeroConfig _resolveConfig(AeroLevel level, bool isDark) {
     switch (level) {
       case AeroLevel.ghost:
-        return _AeroConfig(
+        return const _AeroConfig(
           opacity: TerritoryTokens.opacityGhost,
           blurSigma: TerritoryTokens.blurNone,
           borderWidth: TerritoryTokens.borderNone,
           hasShadow: false,
         );
       case AeroLevel.subtle:
-        return _AeroConfig(
+        return const _AeroConfig(
           opacity: TerritoryTokens.opacitySubtle,
           blurSigma: TerritoryTokens.blurSubtle,
           borderWidth: TerritoryTokens.borderHairline,
           hasShadow: false,
         );
       case AeroLevel.medium:
-        return _AeroConfig(
+        return const _AeroConfig(
           opacity: TerritoryTokens.opacityMedium,
           blurSigma: TerritoryTokens.blurMedium,
           borderWidth: TerritoryTokens.borderThin,

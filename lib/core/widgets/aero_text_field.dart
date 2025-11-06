@@ -187,7 +187,7 @@ class _AeroTextFieldState extends State<AeroTextField>
               ) ?? const TextStyle(),
               child: Text(widget.label!),
             ),
-            SizedBox(height: TerritoryTokens.space8),
+            const SizedBox(height: TerritoryTokens.space8),
           ],
 
           // TextField con Aero styling
@@ -245,7 +245,7 @@ class _AeroTextFieldState extends State<AeroTextField>
                       prefixIcon: widget.prefixIcon,
                       suffixIcon: widget.suffixIcon,
                       contentPadding: widget.contentPadding ??
-                          EdgeInsets.symmetric(
+                          const EdgeInsets.symmetric(
                             horizontal: TerritoryTokens.space16,
                             vertical: TerritoryTokens.space12,
                           ),
@@ -262,7 +262,7 @@ class _AeroTextFieldState extends State<AeroTextField>
           if (errorMessage != null || 
               widget.helperText != null || 
               (widget.showCounter && widget.maxLength != null)) ...[
-            SizedBox(height: TerritoryTokens.space4),
+            const SizedBox(height: TerritoryTokens.space4),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -287,7 +287,7 @@ class _AeroTextFieldState extends State<AeroTextField>
                 ),
                 // Counter
                 if (widget.showCounter && widget.maxLength != null) ...[
-                  SizedBox(width: TerritoryTokens.space8),
+                  const SizedBox(width: TerritoryTokens.space8),
                   _Counter(
                     current: _currentLength,
                     max: widget.maxLength!,
@@ -322,7 +322,7 @@ class _ErrorText extends StatelessWidget {
           size: 16,
           color: color,
         ),
-        SizedBox(width: TerritoryTokens.space4),
+        const SizedBox(width: TerritoryTokens.space4),
         Expanded(
           child: Text(
             text,

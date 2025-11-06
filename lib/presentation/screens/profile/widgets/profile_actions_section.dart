@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../../core/design_system/territory_tokens.dart';
@@ -18,9 +17,6 @@ class ProfileActionsSection extends ConsumerWidget {
     final mapType = ref.watch(mapTypeProvider);
     final mapTypeNotifier = ref.read(mapTypeProvider.notifier);
 
-    final editBackground = theme.colorScheme.primary.withValues(alpha: 0.9);
-    final editForeground = theme.colorScheme.onPrimary;
-
     final logoutBackground = theme.colorScheme.error.withValues(alpha: 0.9);
     final logoutForeground = theme.colorScheme.onError;
 
@@ -34,64 +30,91 @@ class ProfileActionsSection extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: AeroButton(
-                    onPressed: () => context.push('/profile/complete'),
-                    isOutlined: true,
-                    backgroundColor: editBackground,
-                    child: IconTheme(
-                      data: IconThemeData(color: editForeground),
-                      child: DefaultTextStyle.merge(
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: editForeground,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.edit),
-                            SizedBox(width: TerritoryTokens.space8),
-                            Text('Editar perfil'),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            const SizedBox.shrink(),
             const SizedBox(height: TerritoryTokens.space12),
-            Wrap(
-              spacing: TerritoryTokens.space12,
-              runSpacing: TerritoryTokens.space12,
-              alignment: WrapAlignment.center,
+            GridView.count(
+              crossAxisCount: MediaQuery.of(context).size.width >= 600 ? 4 : 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: TerritoryTokens.space12,
+              crossAxisSpacing: TerritoryTokens.space12,
+              childAspectRatio: 1.9,
               children: MapType.values.map((type) {
                 final isSelected = type == mapType;
-                final background = isSelected
-                    ? theme.colorScheme.secondary.withValues(alpha: 0.9)
+                final foreground = isSelected
+                    ? theme.colorScheme.onPrimary
+                    : theme.colorScheme.onSurface;
+                final gradient = isSelected
+                    ? LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          theme.colorScheme.primaryContainer
+                              .withValues(alpha: 0.9),
+                          theme.colorScheme.secondaryContainer
+                              .withValues(alpha: 0.9),
+                        ],
+                      )
+                    : null;
+                final bgColor = isSelected
+                    ? null
                     : theme.colorScheme.surfaceContainerHighest
                         .withValues(alpha: 0.6);
-                final foreground = isSelected
-                    ? theme.colorScheme.onSecondary
-                    : theme.colorScheme.onSurface;
+                final label = _labelFor(type);
+                final icon = _iconFor(type);
 
-                return SizedBox(
-                  width: 120,
-                  child: AeroButton(
-                    onPressed: () => mapTypeNotifier.setMapType(type),
-                    isOutlined: true,
-                    backgroundColor: background,
-                    child: DefaultTextStyle.merge(
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: foreground,
-                        fontWeight: FontWeight.w600,
+                return GestureDetector(
+                  onTap: () => mapTypeNotifier.setMapType(type),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeInOut,
+                    padding: const EdgeInsets.all(TerritoryTokens.space16),
+                    decoration: BoxDecoration(
+                      gradient: gradient,
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected
+                            ? theme.colorScheme.primary
+                                .withValues(alpha: 0.5)
+                            : theme.dividerColor.withValues(alpha: 0.15),
                       ),
-                      child: IconTheme(
-                        data: IconThemeData(color: foreground),
-                        child: _MapTypeLabel(type: type),
-                      ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: theme.colorScheme.primary
+                                    .withValues(alpha: 0.2),
+                                blurRadius: 14,
+                                offset: const Offset(0, 8),
+                              ),
+                            ]
+                          : [],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: foreground.withValues(alpha: 0.1),
+                          ),
+                          child: Icon(
+                            icon,
+                            size: 22,
+                            color: foreground,
+                          ),
+                        ),
+                        const SizedBox(height: TerritoryTokens.space8),
+                        Text(
+                          label,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: foreground,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );
@@ -145,33 +168,6 @@ class ProfileActionsSection extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _MapTypeLabel extends StatelessWidget {
-  final MapType type;
-
-  const _MapTypeLabel({required this.type});
-
-  @override
-  Widget build(BuildContext context) {
-    final label = _labelFor(type);
-    final icon = _iconFor(type);
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 20),
-        const SizedBox(width: TerritoryTokens.space8),
-        Flexible(
-          child: Text(
-            label,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
     );
   }
 

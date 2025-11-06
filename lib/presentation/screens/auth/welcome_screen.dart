@@ -88,7 +88,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         ),
         child: SafeArea(
           child: Padding(
-            padding: EdgeInsets.symmetric(
+            padding: const EdgeInsets.symmetric(
               horizontal: TerritoryTokens.space24,
               vertical: TerritoryTokens.space32,
             ),
@@ -287,7 +287,7 @@ class _HeroIllustration extends StatelessWidget {
                 ),
               ],
             ),
-            child: Icon(
+            child: const Icon(
               Icons.directions_run_rounded,
               size: 50,
               color: Colors.white,

@@ -88,7 +88,7 @@ class GpsSettingsScreen extends ConsumerWidget {
                   onSelectionChanged: (Set<String> selection) {
                     ref.read(settingsProvider.notifier).setGpsAccuracy(selection.first);
                   },
-                  style: ButtonStyle(
+                  style: const ButtonStyle(
                     visualDensity: VisualDensity.comfortable,
                   ),
                 ),

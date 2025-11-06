@@ -11,12 +11,41 @@ import 'api_service.dart';
 class FirebaseAuthService {
   final FirebaseAuth _auth;
   final ApiService _api;
+  static Future<void>? _googleInitialization;
+  static const String _googleServerClientId =
+      '28475506464-fak9o969p6igi6mp1l8et45ru6usrm1p.apps.googleusercontent.com';
   
   FirebaseAuthService({
     FirebaseAuth? auth,
     required ApiService apiService,
   })  : _auth = auth ?? FirebaseAuth.instance,
         _api = apiService;
+
+  Future<void> _ensureGoogleInitialized() {
+    final existing = _googleInitialization;
+    if (existing != null) {
+      return existing;
+    }
+    final initialization = GoogleSignIn.instance.initialize(
+      serverClientId: _googleServerClientId,
+    );
+    _googleInitialization = initialization;
+    return initialization;
+  }
+
+  Future<GoogleSignInAccount?> _authenticateWithGoogle() async {
+    await _ensureGoogleInitialized();
+    try {
+      return await GoogleSignIn.instance.authenticate(
+        scopeHint: const <String>['email'],
+      );
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        return null;
+      }
+      rethrow;
+    }
+  }
 
   /// Stream del estado de autenticación
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -123,20 +152,17 @@ class FirebaseAuthService {
           break;
           
         case AuthMethod.google:
-          // Iniciar sesión con Google
           if (kIsWeb) {
             final cred = await _auth.signInWithPopup(GoogleAuthProvider());
             user = cred.user;
           } else {
-            final google = GoogleSignIn(scopes: const ['email']);
-            final account = await google.signIn();
+            final GoogleSignInAccount? account = await _authenticateWithGoogle();
             if (account == null) {
               throw AppError(message: 'Inicio cancelado', code: 'google-signin-cancelled');
             }
-            final tokens = await account.authentication;
+            final GoogleSignInAuthentication tokens = account.authentication;
             final credential = GoogleAuthProvider.credential(
               idToken: tokens.idToken,
-              accessToken: tokens.accessToken,
             );
             final cred = await _auth.signInWithCredential(credential);
             user = cred.user;
@@ -210,20 +236,13 @@ class FirebaseAuthService {
         );
         return user;
       } else {
-        // Flujo nativo con google_sign_in v6 (Android/iOS)
-        // IMPORTANTE: serverClientId es el Web Client ID de Firebase Console
-        final google = GoogleSignIn(
-          scopes: const ['email'],
-          serverClientId: '28475506464-fak9o969p6igi6mp1l8et45ru6usrm1p.apps.googleusercontent.com',
-        );
-        final account = await google.signIn();
+        final GoogleSignInAccount? account = await _authenticateWithGoogle();
         if (account == null) {
           throw AppError(message: 'Inicio cancelado', code: 'google-signin-cancelled');
         }
-        final tokens = await account.authentication; // idToken y accessToken
+        final GoogleSignInAuthentication tokens = account.authentication;
         final credential = GoogleAuthProvider.credential(
           idToken: tokens.idToken,
-          accessToken: tokens.accessToken,
         );
         final cred = await _auth.signInWithCredential(credential);
         final user = cred.user;
@@ -287,7 +306,7 @@ class FirebaseAuthService {
           code: 'no-user',
         );
       }
-      
+
       await user.reauthenticateWithCredential(credential);
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);

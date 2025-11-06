@@ -1,4 +1,6 @@
 import 'package:turf/turf.dart' as turf;
+
+import '../entities/territory.dart';
 import '../track_processing/track_processing.dart';
 
 class TerritoryService {
@@ -78,43 +80,50 @@ class TerritoryService {
     }
   }
 
-  Map<String, dynamic> mergeTerritory({
-    Map<String, dynamic>? existing,
+  Territory mergeTerritory({
+    Territory? existing,
+    required String userId,
     required Map<String, dynamic> newPolygon,
     required double areaGainedM2,
   }) {
-    Map<String, dynamic>? existingGeoJson = existing?['unionGeoJson'];
-    Map<String, dynamic> unionGeoJson;
+    final unionGeoJson = _mergeGeoJson(existing?.unionGeoJson, newPolygon);
+    final totalArea = _geoJsonArea(unionGeoJson);
 
-    if (existingGeoJson == null) {
-      unionGeoJson = newPolygon;
-    } else if (existingGeoJson['type'] == 'Polygon') {
-      unionGeoJson = {
+    return Territory(
+      id: existing?.id ?? userId,
+      unionGeoJson: unionGeoJson,
+      totalAreaM2: totalArea,
+      lastAreaGainM2: areaGainedM2,
+      createdAt: existing?.createdAt ?? DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> _mergeGeoJson(
+    Map<String, dynamic>? existingGeoJson,
+    Map<String, dynamic> newPolygon,
+  ) {
+    if (existingGeoJson == null || existingGeoJson.isEmpty) {
+      return newPolygon;
+    }
+
+    if (existingGeoJson['type'] == 'Polygon') {
+      return {
         'type': 'MultiPolygon',
         'coordinates': [existingGeoJson['coordinates'], newPolygon['coordinates']],
       };
-    } else if (existingGeoJson['type'] == 'MultiPolygon') {
+    }
+
+    if (existingGeoJson['type'] == 'MultiPolygon') {
       final List<dynamic> coords = List<dynamic>.from(existingGeoJson['coordinates']);
       coords.add(newPolygon['coordinates']);
-      unionGeoJson = {
+      return {
         'type': 'MultiPolygon',
         'coordinates': coords,
       };
-    } else {
-      unionGeoJson = newPolygon;
     }
 
-    final totalArea = _geoJsonArea(unionGeoJson);
-
-    final updated = <String, dynamic>{
-      if (existing?['createdAt'] != null) 'createdAt': existing!['createdAt'],
-      'unionGeoJson': unionGeoJson,
-      'totalAreaM2': totalArea,
-      'updatedAt': DateTime.now().toIso8601String(),
-      'lastAreaGainM2': areaGainedM2,
-    };
-
-    return updated;
+    return newPolygon;
   }
 
   double _geoJsonArea(Map<String, dynamic> geojson) {
