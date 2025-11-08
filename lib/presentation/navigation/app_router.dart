@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../screens/auth/welcome_screen.dart';
 import '../screens/auth/auth_method_selection_screen.dart';
 import '../screens/auth/email_registration_screen.dart';
@@ -19,11 +20,14 @@ import '../screens/run/run_screen.dart';
 import '../screens/history/history_screen.dart';
 import '../screens/history/run_detail_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/legal/legal_consent_screen.dart';
 import '../screens/achievements/achievements_screen.dart';
 import '../providers/app_providers.dart';
+import '../providers/run_tracker_provider.dart';
 import '../../core/widgets/aero_nav_bar.dart';
 import '../../core/design_system/territory_tokens.dart';
 import 'custom_page_transition.dart';
+import '../../core/constants/legal_constants.dart';
 
 /// Notificador para GoRouter que reacciona a cambios de auth y perfil.
 class RedirectNotifier extends ChangeNotifier {
@@ -52,14 +56,33 @@ final routerProvider = Provider<GoRouter>((ref) {
     debugLogDiagnostics: !kReleaseMode,
     refreshListenable: redirectNotifier,
     redirect: (context, state) {
-      final isLoggedIn = ref.read(currentFirebaseUserProvider) != null;
-      final hasProfile = ref.read(hasCompleteProfileProvider);
+      final authState = ref.read(authStateStreamProvider);
+      final profileState = ref.read(hasCompleteProfileProvider);
+
+      final isAuthLoading = authState.isLoading;
+      final isProfileLoading = profileState.isLoading;
+
+      final user = authState.asData?.value;
+      final isLoggedIn = user != null;
+      final hasProfile = profileState.maybeWhen(
+        data: (value) => value,
+        orElse: () => false,
+      );
 
       final isAuthRoute = state.matchedLocation.startsWith('/auth');
       final isPublicRoute = state.matchedLocation == '/welcome';
       final isSplash = state.matchedLocation == '/splash';
+      final isLegalRoute = state.matchedLocation == '/legal-consent';
+
+      // Mientras resolvemos estado de auth o perfil, mantener splash
+      if ((isAuthLoading || (isLoggedIn && isProfileLoading)) && !isSplash) {
+        return '/splash';
+      }
 
       if (!isLoggedIn) {
+        if (isSplash) {
+          return '/welcome';
+        }
         // Si no está logueado, solo puede acceder a las rutas públicas/auth
         return (isPublicRoute || isAuthRoute) ? null : '/welcome';
       }
@@ -70,6 +93,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!hasProfile) {
         // Si no tiene perfil, forzar onboarding
         return isOnboardingRoute ? null : '/auth/onboarding';
+      }
+
+      final legalConsent = ref.read(legalConsentProvider);
+      final needsConsent = legalConsent.requiresRenewal(
+        requiredTermsVersion: LegalConstants.termsVersion,
+        requiredPrivacyVersion: LegalConstants.privacyVersion,
+      );
+
+      if (needsConsent && !isLegalRoute) {
+        return '/legal-consent';
+      }
+
+      if (!needsConsent && isLegalRoute) {
+        return '/map';
       }
       
       // Si tiene perfil y está en una ruta de auth/pública, redirigir al mapa
@@ -85,6 +122,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/splash',
         name: 'splash',
         builder: (context, state) => const SplashScreen(),
+      ),
+      
+      GoRoute(
+        path: '/legal-consent',
+        name: 'legal-consent',
+        pageBuilder: (context, state) => CustomTransitionPage(
+          key: state.pageKey,
+          child: const LegalConsentScreen(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(
+              opacity: animation,
+              child: child,
+            );
+          },
+        ),
       ),
       
       // Welcome screen (sin auth requerido)
@@ -333,34 +385,16 @@ class _AppShellState extends ConsumerState<AppShell> {
     AeroNavBarItem(icon: Icons.person_outline, label: 'Perfil'),
   ];
 
-  // ✅ Estado local para navbar (sin providers)
-  bool _navBarVisible = true;
-  
-  // ✅ Callback para que RunScreen notifique cambios SIN provider
-  void _onRunStateChanged(bool isRunning, bool isPaused) {
-    // Ejecutar después del frame actual para evitar "modify during build"
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      
-      final currentPath = GoRouterState.of(context).matchedLocation;
-      final bool onRunScreen = currentPath.startsWith('/map');
-      final bool shouldBeVisible = !(onRunScreen && isRunning && !isPaused);
-      
-      if (_navBarVisible != shouldBeVisible) {
-        setState(() {
-          _navBarVisible = shouldBeVisible;
-        });
-      }
-    });
-  }
-  
   late final Widget _persistentMap = RunScreen(
-    onRunStateChanged: _onRunStateChanged,
+    onRunStateChanged: null,
   );
 
   @override
   Widget build(BuildContext context) {
     final currentPath = GoRouterState.of(context).matchedLocation;
+    final runStatus = ref.watch(
+      runTrackerProvider.select((state) => (state.isRunning, state.isPaused)),
+    );
     int currentIndex = 0;
 
     if (currentPath.startsWith('/history')) {
@@ -370,6 +404,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
 
     final bool onRunScreen = currentPath.startsWith('/map');
+    final bool navBarVisible = !(onRunScreen && runStatus.$1 && !runStatus.$2);
 
     return Scaffold(
       extendBody: true,
@@ -381,7 +416,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               child: _BlurredOverlay(child: widget.child),
             ),
           _MeasuredNavBar(
-            visible: _navBarVisible,
+            visible: navBarVisible,
             currentIndex: currentIndex,
             onItemSelected: (index) {
               switch (index) {
@@ -481,6 +516,7 @@ class SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -488,32 +524,41 @@ class SplashScreen extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Theme.of(context).colorScheme.primary,
-              Theme.of(context).colorScheme.secondary,
+              scheme.primary,
+              scheme.secondary,
             ],
           ),
         ),
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.directions_run,
-                size: 80,
-                color: Colors.white,
-              ),
-              SizedBox(height: 24),
-              Text(
-                'Territory Run',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: scheme.surface.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(TerritoryTokens.radiusXLarge),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(36),
+                  child: SvgPicture.asset(
+                    'assets/icons/running.svg',
+                    width: 120,
+                    height: 120,
+                    colorFilter: ColorFilter.mode(scheme.onPrimary, BlendMode.srcIn),
+                  ),
                 ),
               ),
-              SizedBox(height: 48),
+              const SizedBox(height: 24),
+              Text(
+                'Territory Run',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      color: scheme.onPrimary,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 32),
               CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                valueColor: AlwaysStoppedAnimation<Color>(scheme.onPrimary),
               ),
             ],
           ),

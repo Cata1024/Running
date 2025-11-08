@@ -50,4 +50,8 @@ abstract class IAchievementsRepository {
   Future<AchievementsSnapshot?> fetchCachedSnapshot(String userId);
 
   Future<void> saveCachedSnapshot(String userId, AchievementsSnapshot snapshot);
+
+  /// Persist the baseline catalog so legacy services can migrate to the new
+  /// snapshot-based flow without leaking Firebase concerns.
+  Future<void> bootstrapCatalogIfNeeded(String userId);
 }

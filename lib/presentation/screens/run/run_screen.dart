@@ -8,6 +8,7 @@ import 'package:running/core/map_icons.dart';
 import 'package:running/core/design_system/territory_tokens.dart';
 import 'package:running/data/models/territory_dto.dart';
 import 'package:running/presentation/providers/app_providers.dart' hide RunState;
+import 'package:running/presentation/providers/territory_provider.dart';
 import 'package:running/presentation/providers/run_tracker_provider.dart';
 import 'package:running/presentation/utils/map_style_utils.dart';
 import '../../utils/run_calculations.dart';
@@ -82,6 +83,8 @@ class _RunScreenState extends ConsumerState<RunScreen> {
   // La mayoría del estado y la lógica ahora viven en `RunTrackerNotifier`.
   GoogleMapController? _mapController;
   MapIconsBundle? _iconBundle;
+  LatLng? _pendingCameraTarget;
+  bool _runListenerInitialized = false;
 
   // Opciones para el modal de guardado (se moverán junto con la lógica)
   final List<String> _terrainOptions = const [
@@ -302,6 +305,29 @@ class _RunScreenState extends ConsumerState<RunScreen> {
     super.dispose();
   }
 
+  void _handleRunStateChange(RunState? previous, RunState next) {
+    if (!mounted) return;
+
+    if (previous?.isRunning != next.isRunning ||
+        previous?.isPaused != next.isPaused) {
+      widget.onRunStateChanged?.call(next.isRunning, next.isPaused);
+    }
+
+    final nextLocation = next.currentLocation;
+    if (!next.followUser || nextLocation == null) {
+      return;
+    }
+
+    final prevLat = previous?.currentLocation?.latitude;
+    final prevLng = previous?.currentLocation?.longitude;
+    final hasLocationChanged =
+        prevLat != nextLocation.latitude || prevLng != nextLocation.longitude;
+
+    if (hasLocationChanged) {
+      _moveCameraTo(nextLocation);
+    }
+  }
+
   void _toggleRun() async {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -316,7 +342,30 @@ class _RunScreenState extends ConsumerState<RunScreen> {
         final conditions = await _promptRunConditions();
         
         // Guardar la carrera con las condiciones
-        await notifier.stopAndSaveRun(conditions: conditions);
+        final result = await notifier.stopAndSaveRun(conditions: conditions);
+        if (!mounted) return;
+        final messenger = ScaffoldMessenger.of(context);
+        if (result.success) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Carrera guardada correctamente'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else if (result.message != null) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(result.message!),
+              behavior: SnackBarBehavior.floating,
+              action: SnackBarAction(
+                label: 'Reintentar',
+                onPressed: () {
+                  notifier.stopAndSaveRun(conditions: conditions);
+                },
+              ),
+            ),
+          );
+        }
       } else {
         // Iniciar nueva carrera
         notifier.startRun();
@@ -333,6 +382,24 @@ class _RunScreenState extends ConsumerState<RunScreen> {
       
       notifier.togglePause();
     });
+  }
+
+  void _moveCameraTo(LatLng target, {double? zoom}) {
+    if (!mounted) return;
+
+    final controller = _mapController;
+    if (controller == null) {
+      _pendingCameraTarget = target;
+      return;
+    }
+
+    _pendingCameraTarget = null;
+
+    final update = zoom != null
+        ? CameraUpdate.newLatLngZoom(target, zoom)
+        : CameraUpdate.newLatLng(target);
+
+    controller.animateCamera(update);
   }
 
   String _formatTime(Duration duration) {
@@ -371,6 +438,19 @@ class _RunScreenState extends ConsumerState<RunScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_runListenerInitialized) {
+      _runListenerInitialized = true;
+      final currentState = ref.read(runTrackerProvider);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _handleRunStateChange(null, currentState);
+      });
+      ref.listen<RunState>(
+        runTrackerProvider,
+        _handleRunStateChange,
+      );
+    }
+
     final runState = ref.watch(runTrackerProvider);
     final theme = Theme.of(context);
     final territoryAsync = ref.watch(userTerritoryDtoProvider);
@@ -405,6 +485,13 @@ class _RunScreenState extends ConsumerState<RunScreen> {
               style: styleString,
               onMapCreated: (controller) {
                 _mapController = controller;
+                final target = _pendingCameraTarget;
+                if (target != null) {
+                  controller.moveCamera(
+                    CameraUpdate.newLatLngZoom(target, 17),
+                  );
+                  _pendingCameraTarget = null;
+                }
               },
               onCameraMoveStarted: () {
                 if (!mounted) return;
@@ -442,11 +529,14 @@ class _RunScreenState extends ConsumerState<RunScreen> {
               isPaused: runState.isPaused,
               onCenter: () {
                 if (!mounted) return;
-                ref.read(runTrackerProvider.notifier).toggleFollowUser(true);
-                if (runState.currentLocation != null) {
-                  _mapController?.animateCamera(
-                    CameraUpdate.newLatLngZoom(runState.currentLocation!, 17),
-                  );
+                final notifier = ref.read(runTrackerProvider.notifier);
+                notifier.toggleFollowUser(true);
+
+                final currentLocation = runState.currentLocation;
+                if (currentLocation != null) {
+                  _moveCameraTo(currentLocation);
+                } else {
+                  notifier.getCurrentLocation();
                 }
               },
               onToggleRun: _toggleRun,

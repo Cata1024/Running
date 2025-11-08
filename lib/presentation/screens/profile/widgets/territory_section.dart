@@ -4,13 +4,13 @@ import 'package:shimmer/shimmer.dart';
 
 import '../../../../core/design_system/territory_tokens.dart';
 import '../../../../core/widgets/aero_widgets.dart';
+import '../../../../domain/entities/territory.dart';
 import '../../../widgets/animated_scale_button.dart';
 import '../../../widgets/pulse_icon.dart';
 import '../../territory/territory_map_screen.dart';
-import '../../../../data/models/territory_dto.dart';
 
 class TerritorySection extends StatelessWidget {
-  final AsyncValue<TerritoryDto?> territoryAsync;
+  final AsyncValue<Territory?> territoryAsync;
 
   const TerritorySection({super.key, required this.territoryAsync});
 

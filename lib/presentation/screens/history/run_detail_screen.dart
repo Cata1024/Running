@@ -1,8 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../providers/app_providers.dart';
 import '../../utils/map_style_utils.dart';
@@ -13,6 +18,7 @@ import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/aero_button.dart';
 import '../../../core/services/route_processor.dart';
 import '../../../data/models/run_dto.dart';
+import '../../../domain/entities/app_settings.dart';
 
 class RunDetailScreen extends ConsumerStatefulWidget {
   final String runId;
@@ -27,6 +33,8 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
   final RouteProcessor _routeProcessor = RouteProcessor();
   RouteProcessingResult? _processedRoute;
   bool _isProcessingRoute = false;
+  bool _isSharing = false;
+  final GlobalKey _shareCardKey = GlobalKey();
 
   @override
   void dispose() {
@@ -87,6 +95,7 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
 
           final route = _parseLineString(run.routeGeoJson);
           final polygon = _parsePolygon(run.polygonGeoJson);
+          final settings = ref.watch(settingsProvider);
 
           // 🎨 PROCESAR RUTA CON PIPELINE PROFESIONAL
           if (route.isNotEmpty && _processedRoute == null && !_isProcessingRoute) {
@@ -187,6 +196,27 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
 
           return Stack(
             children: [
+              Offstage(
+                offstage: true,
+                child: RepaintBoundary(
+                  key: _shareCardKey,
+                  child: _ShareCard(
+                    run: run,
+                    route: displayRoute,
+                    polygon: polygon,
+                    settings: settings,
+                    distanceKm: distanceKm,
+                    durationLabel: durationLabel,
+                    paceLabel: paceLabel,
+                    speedLabel: speedLabel,
+                    isClosedCircuit: isClosedCircuit,
+                    areaKm2: areaKm2,
+                    weatherData: weatherData,
+                    weatherIcon: weatherIcon,
+                    shareText: shareText,
+                  ),
+                ),
+              ),
               GoogleMap(
                 initialCameraPosition:
                     CameraPosition(target: initialTarget, zoom: 14),
@@ -213,10 +243,16 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
                 child: SafeArea(
                   bottom: false,
                   child: _TopHeaderRow(
-                    shareText: shareText,
-                    onShare: () => SharePlus.instance.share(
-                      ShareParams(text: shareText),
-                    ),
+                    onShare: _isSharing
+                        ? null
+                        : () => _shareRun(
+                              run: run,
+                              route: displayRoute,
+                              polygon: polygon,
+                              settings: settings,
+                              shareText: shareText,
+                            ),
+                    isSharing: _isSharing,
                     onBack: () => Navigator.of(context).maybePop(),
                     meta: _buildHeader(run, theme),
                   ),
@@ -427,19 +463,62 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
       northeast: LatLng(maxLat, maxLng),
     );
   }
+
+  Future<void> _shareRun({
+    required RunDto run,
+    required List<LatLng> route,
+    required List<LatLng> polygon,
+    required AppSettings settings,
+    required String shareText,
+  }) async {
+    try {
+      setState(() => _isSharing = true);
+      await Future.delayed(const Duration(milliseconds: 50));
+      final boundary = _shareCardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        throw Exception('No se pudo generar la vista para compartir');
+      }
+
+      final ui.Image image = await boundary.toImage(pixelRatio: 3);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception('Captura inválida');
+      }
+
+      final bytes = byteData.buffer.asUint8List();
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/territory_run_${run.id}_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(bytes, flush: true);
+
+      await Share.shareXFiles([
+        XFile(file.path),
+      ], text: shareText);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo preparar la imagen para compartir: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSharing = false);
+      }
+    }
+  }
 }
 
 class _TopHeaderRow extends StatelessWidget {
-  final String shareText;
-  final VoidCallback onShare;
+  final VoidCallback? onShare;
   final VoidCallback onBack;
   final Widget meta;
+  final bool isSharing;
 
   const _TopHeaderRow({
-    required this.shareText,
     required this.onShare,
     required this.onBack,
     required this.meta,
+    required this.isSharing,
   });
 
   @override
@@ -473,10 +552,343 @@ class _TopHeaderRow extends StatelessWidget {
           backgroundColor: theme.colorScheme.surfaceContainerHighest,
           iconColor: theme.colorScheme.primary,
           size: 44,
+          isLoading: isSharing,
         ),
       ],
     );
   }
+}
+
+class _ShareCard extends StatelessWidget {
+  final RunDto run;
+  final List<LatLng> route;
+  final List<LatLng> polygon;
+  final AppSettings settings;
+  final double distanceKm;
+  final String durationLabel;
+  final String paceLabel;
+  final String speedLabel;
+  final bool isClosedCircuit;
+  final double? areaKm2;
+  final Map<String, dynamic>? weatherData;
+  final IconData weatherIcon;
+  final String shareText;
+
+  const _ShareCard({
+    required this.run,
+    required this.route,
+    required this.polygon,
+    required this.settings,
+    required this.distanceKm,
+    required this.durationLabel,
+    required this.paceLabel,
+    required this.speedLabel,
+    required this.isClosedCircuit,
+    required this.areaKm2,
+    required this.weatherData,
+    required this.weatherIcon,
+    required this.shareText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return SizedBox(
+      width: 1080,
+      height: 1080,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              scheme.primary.withValues(alpha: 0.85),
+              scheme.secondary.withValues(alpha: 0.85),
+              scheme.tertiary.withValues(alpha: 0.8),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.all(72),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.surface.withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(48),
+                  ),
+                  child: CustomPaint(
+                    painter: _RoutePainter(
+                      route: route,
+                      polygon: polygon,
+                      settings: settings,
+                      routeColor: scheme.primary,
+                      polygonColor: scheme.secondary,
+                      backgroundColor: scheme.surface,
+                      maskColor: scheme.surface,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 120,
+              right: 120,
+              bottom: 140,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Territory Run',
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Wrap(
+                    spacing: 24,
+                    runSpacing: 16,
+                    children: [
+                      _MetricChip(label: 'Distancia', value: '${distanceKm.toStringAsFixed(2)} km'),
+                      _MetricChip(label: 'Duración', value: durationLabel),
+                      _MetricChip(label: 'Ritmo', value: '$paceLabel min/km'),
+                      _MetricChip(label: 'Velocidad', value: '$speedLabel km/h'),
+                      if (isClosedCircuit)
+                        _MetricChip(label: 'Circuito', value: 'Cerrado', icon: Icons.check_circle),
+                      if (areaKm2 != null)
+                        _MetricChip(label: 'Área ganada', value: '${areaKm2!.toStringAsFixed(3)} km²'),
+                      if (weatherData != null)
+                        _MetricChip(
+                          label: 'Clima',
+                          value: '${(weatherData?['condition'] as String?) ?? ''}${weatherData?['temperatureC'] != null ? ', ${(weatherData!['temperatureC'] as num).toStringAsFixed(1)}°C' : ''}',
+                          icon: weatherIcon,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  Text(
+                    shareText,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData? icon;
+
+  const _MetricChip({
+    required this.label,
+    required this.value,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 18, color: scheme.primary),
+            const SizedBox(width: 8),
+          ],
+          Text(
+            '$label: ',
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: scheme.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutePainter extends CustomPainter {
+  final List<LatLng> route;
+  final List<LatLng> polygon;
+  final AppSettings settings;
+  final Color routeColor;
+  final Color polygonColor;
+  final Color backgroundColor;
+  final Color maskColor;
+
+  _RoutePainter({
+    required this.route,
+    required this.polygon,
+    required this.settings,
+    required this.routeColor,
+    required this.polygonColor,
+    required this.backgroundColor,
+    required this.maskColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final allPoints = <LatLng>[];
+    allPoints.addAll(route);
+    allPoints.addAll(polygon);
+
+    final homeLat = settings.homeLatitude;
+    final homeLon = settings.homeLongitude;
+    double? homeLatValue;
+    double? homeLonValue;
+    if (settings.homeFilterEnabled && homeLat != null && homeLon != null) {
+      homeLatValue = homeLat;
+      homeLonValue = homeLon;
+      allPoints.add(LatLng(homeLatValue, homeLonValue));
+    }
+
+    if (allPoints.isEmpty) {
+      final paint = Paint()..color = backgroundColor;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(40)),
+        paint,
+      );
+      return;
+    }
+
+    double minLat = allPoints.first.latitude;
+    double maxLat = allPoints.first.latitude;
+    double minLon = allPoints.first.longitude;
+    double maxLon = allPoints.first.longitude;
+
+    for (final p in allPoints) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLon) minLon = p.longitude;
+      if (p.longitude > maxLon) maxLon = p.longitude;
+    }
+
+    if ((maxLat - minLat).abs() < 1e-5) {
+      maxLat += 0.0005;
+      minLat -= 0.0005;
+    }
+    if ((maxLon - minLon).abs() < 1e-5) {
+      maxLon += 0.0005;
+      minLon -= 0.0005;
+    }
+
+    Offset _toOffset(LatLng point) {
+      final dx = (point.longitude - minLon) / (maxLon - minLon);
+      final dy = (point.latitude - minLat) / (maxLat - minLat);
+      return Offset(dx * size.width, size.height - dy * size.height);
+    }
+
+    final backgroundPaint = Paint()
+      ..color = backgroundColor
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(40)),
+      backgroundPaint,
+    );
+
+    if (polygon.length >= 3) {
+      final path = Path();
+      final first = _toOffset(polygon.first);
+      path.moveTo(first.dx, first.dy);
+      for (final point in polygon.skip(1)) {
+        final offset = _toOffset(point);
+        path.lineTo(offset.dx, offset.dy);
+      }
+      path.close();
+
+      final polygonPaint = Paint()
+        ..color = polygonColor.withValues(alpha: 0.25)
+        ..style = PaintingStyle.fill;
+      canvas.drawPath(path, polygonPaint);
+
+      final polygonStroke = Paint()
+        ..color = polygonColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4;
+      canvas.drawPath(path, polygonStroke);
+    }
+
+    if (route.length >= 2) {
+      final path = Path();
+      final first = _toOffset(route.first);
+      path.moveTo(first.dx, first.dy);
+      for (final point in route.skip(1)) {
+        final offset = _toOffset(point);
+        path.lineTo(offset.dx, offset.dy);
+      }
+
+      final routePaint = Paint()
+        ..color = routeColor
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = 8;
+      canvas.drawPath(path, routePaint);
+
+      final startPaint = Paint()..color = routeColor.withValues(alpha: 0.3);
+      final startOffset = _toOffset(route.first);
+      canvas.drawCircle(startOffset, 12, startPaint);
+      final endOffset = _toOffset(route.last);
+      canvas.drawCircle(endOffset, 12, Paint()..color = routeColor);
+    }
+
+    if (homeLatValue != null && homeLonValue != null) {
+      final center = _toOffset(LatLng(homeLatValue, homeLonValue));
+      final metersPerDegLat = 111320.0;
+      final metersPerDegLon = 111320.0 * math.cos(homeLatValue * math.pi / 180);
+      final degLatRadius = settings.homeRadiusMeters / metersPerDegLat;
+      final degLonRadius = settings.homeRadiusMeters / metersPerDegLon;
+      final pxPerDegLat = size.height / (maxLat - minLat);
+      final pxPerDegLon = size.width / (maxLon - minLon);
+      final radiusPx = math.max(
+        (degLatRadius * pxPerDegLat).abs(),
+        (degLonRadius * pxPerDegLon).abs(),
+      );
+
+      final maskPaint = Paint()
+        ..color = maskColor
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(center, radiusPx, maskPaint);
+
+      final blurPaint = Paint()
+        ..color = maskColor.withValues(alpha: 0.35)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
+      canvas.drawCircle(center, radiusPx + 24, blurPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
 class _WeatherInfo extends StatelessWidget {

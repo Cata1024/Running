@@ -7,6 +7,7 @@ import '../../../core/responsive/responsive_builder.dart';
 import '../../../core/widgets/aero_widgets.dart';
 import '../../../core/widgets/animated_list_item.dart';
 import '../../providers/app_providers.dart';
+import '../../providers/territory_provider.dart';
 import 'widgets/profile_view_model.dart';
 import 'widgets/profile_header.dart';
 import 'widgets/level_section.dart';
@@ -34,13 +35,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   Future<void> _refreshProfile() async {
     // Invalidar los providers para forzar recarga
     ref.invalidate(userProfileDtoProvider);
-    ref.invalidate(userTerritoryDtoProvider);
+    ref.invalidate(territoryUseCaseProvider);
+    ref.invalidate(userTerritoryProvider);
     ref.invalidate(userRunsDtoProvider);
 
     // Esperar a que se complete la recarga
     await Future.wait([
       ref.read(userProfileDtoProvider.future),
-      ref.read(userTerritoryDtoProvider.future),
+      ref.read(userTerritoryProvider.future),
       ref.read(userRunsDtoProvider.future),
     ]);
   }
@@ -49,7 +51,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   Widget build(BuildContext context) {
     super.build(context);
     final profileAsync = ref.watch(userProfileDtoProvider);
-    final territoryAsync = ref.watch(userTerritoryDtoProvider);
+    final territoryAsync = ref.watch(userTerritoryProvider);
     final runsAsync = ref.watch(userRunsDtoProvider);
     final currentUser = ref.watch(currentFirebaseUserProvider);
     final theme = Theme.of(context);

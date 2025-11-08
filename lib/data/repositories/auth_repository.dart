@@ -315,6 +315,32 @@ class AuthRepository implements IAuthRepository {
   }
 
   @override
+  Future<Either<AuthFailure, Unit>> reauthenticateWithPassword(
+      String password) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null || user.email == null) {
+        return Left(AuthFailure.noUserFound());
+      }
+
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: password,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+      return const Right(unit);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password') {
+        return Left(AuthFailure.wrongPassword());
+      }
+      return Left(_handleAuthException(e));
+    } catch (_) {
+      return Left(AuthFailure.serverError());
+    }
+  }
+
+  @override
   Future<Either<AuthFailure, Unit>> verifyEmail() async {
     try {
       final user = _auth.currentUser;

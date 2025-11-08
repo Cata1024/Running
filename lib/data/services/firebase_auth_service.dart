@@ -3,6 +3,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/error/app_error.dart';
+import '../../core/services/audit_logger.dart';
 import '../../domain/entities/registration_data.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'api_service.dart';
@@ -11,6 +12,7 @@ import 'api_service.dart';
 class FirebaseAuthService {
   final FirebaseAuth _auth;
   final ApiService _api;
+  final AuditLogger _auditLogger;
   static Future<void>? _googleInitialization;
   static const String _googleServerClientId =
       '28475506464-fak9o969p6igi6mp1l8et45ru6usrm1p.apps.googleusercontent.com';
@@ -18,8 +20,10 @@ class FirebaseAuthService {
   FirebaseAuthService({
     FirebaseAuth? auth,
     required ApiService apiService,
+    required AuditLogger auditLogger,
   })  : _auth = auth ?? FirebaseAuth.instance,
-        _api = apiService;
+        _api = apiService,
+        _auditLogger = auditLogger;
 
   Future<void> _ensureGoogleInitialized() {
     final existing = _googleInitialization;
@@ -72,6 +76,11 @@ class FirebaseAuthService {
       }
       final user = credential.user!;
       await _ensureUserDocument(user);
+      await _auditLogger.log('auth.login', {
+        'uid': user.uid,
+        'email': user.email,
+        'provider': 'password',
+      });
       return user;
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
@@ -234,6 +243,11 @@ class FirebaseAuthService {
           goalType: goalType,
           weeklyDistanceGoal: weeklyDistanceGoal,
         );
+        await _auditLogger.log('auth.login', {
+          'uid': user.uid,
+          'email': user.email,
+          'provider': 'google',
+        });
         return user;
       } else {
         final GoogleSignInAccount? account = await _authenticateWithGoogle();
@@ -258,6 +272,12 @@ class FirebaseAuthService {
           weeklyDistanceGoal: weeklyDistanceGoal,
         );
         
+        await _auditLogger.log('auth.login', {
+          'uid': user.uid,
+          'email': user.email,
+          'provider': 'google',
+        });
+
         return user;
       }
     } on FirebaseAuthException catch (e) {

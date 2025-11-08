@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/services/audit_logger.dart';
 import '../../domain/entities/app_settings.dart';
 import '../../domain/services/notification_scheduler_service.dart';
 
@@ -10,6 +11,7 @@ final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(Setting
 /// Notifier para manejar las configuraciones de la app
 class SettingsNotifier extends Notifier<AppSettings> {
   static const String _storageKey = 'app_settings_v1';
+  AuditLogger get _auditLogger => ref.read(auditLoggerProvider);
   
   @override
   AppSettings build() {
@@ -161,50 +163,97 @@ class SettingsNotifier extends Notifier<AppSettings> {
   // ========== PRIVACIDAD ==========
   
   Future<void> setPublicProfile(bool isPublic) async {
+    final previous = state.publicProfile;
     state = state.copyWith(publicProfile: isPublic);
     await _saveSettings();
+    if (previous != isPublic) {
+      await _auditLogger.log('privacy.public_profile', {
+        'previous': previous,
+        'next': isPublic,
+      });
+    }
   }
 
   Future<void> setShareLocationLive(bool share) async {
+    final previous = state.shareLocationLive;
     state = state.copyWith(shareLocationLive: share);
     await _saveSettings();
+    if (previous != share) {
+      await _auditLogger.log('privacy.share_location_live', {
+        'previous': previous,
+        'next': share,
+      });
+    }
   }
 
   Future<void> setAllowAnalytics(bool allow) async {
+    final previous = state.allowAnalytics;
     state = state.copyWith(allowAnalytics: allow);
     await _saveSettings();
+    if (previous != allow) {
+      await _auditLogger.log('privacy.allow_analytics', {
+        'previous': previous,
+        'next': allow,
+      });
+    }
   }
 
   // ========== FILTRO DE HOGAR ==========
   
   Future<void> toggleHomeFilter(bool enabled) async {
+    final previous = state.homeFilterEnabled;
     state = state.copyWith(homeFilterEnabled: enabled);
     await _saveSettings();
+    if (previous != enabled) {
+      await _auditLogger.log('privacy.home_filter.toggle', {
+        'previous': previous,
+        'next': enabled,
+      });
+    }
   }
 
   Future<void> setHomeLocation({
     required double latitude,
     required double longitude,
   }) async {
+    final prevLat = state.homeLatitude;
+    final prevLon = state.homeLongitude;
     state = state.copyWith(
       homeLatitude: latitude,
       homeLongitude: longitude,
     );
     await _saveSettings();
+    await _auditLogger.log('privacy.home_filter.location', {
+      'previous': prevLat != null && prevLon != null
+          ? {'lat': prevLat, 'lon': prevLon}
+          : null,
+      'next': {'lat': latitude, 'lon': longitude},
+    });
   }
 
   Future<void> setHomeRadius(double radiusMeters) async {
+    final previous = state.homeRadiusMeters;
     state = state.copyWith(homeRadiusMeters: radiusMeters);
     await _saveSettings();
+    if ((previous - radiusMeters).abs() >= 0.1) {
+      await _auditLogger.log('privacy.home_filter.radius', {
+        'previous': previous,
+        'next': radiusMeters,
+      });
+    }
   }
 
   Future<void> clearHomeLocation() async {
+    final hadLocation = state.homeLatitude != null && state.homeLongitude != null;
     state = state.copyWith(
       homeFilterEnabled: false,
       homeLatitude: null,
       homeLongitude: null,
     );
     await _saveSettings();
+    await _auditLogger.log('privacy.home_filter.cleared', {
+      'hadLocation': hadLocation,
+    });
   }
 
   // ========== UTILIDADES ==========

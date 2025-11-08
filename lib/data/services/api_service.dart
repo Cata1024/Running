@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -56,6 +57,8 @@ class ApiService {
       'Content-Type': 'application/json',
     };
   }
+
+  Future<Map<String, String>> get authHeaders => _authHeaders();
 
   Uri _uri(String path, [Map<String, String>? query]) {
     return Uri.parse('$_baseUrl$path').replace(queryParameters: query);
@@ -205,6 +208,52 @@ class ApiService {
     await _request('DELETE', '/runs/$id');
   }
 
+  // ===== Legal & Compliance =====
+
+  Future<List<Map<String, dynamic>>> fetchLegalDocuments() async {
+    final result = await _request('GET', '/legal/documents');
+    if (result is List) {
+      return result
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return const [];
+  }
+
+  Future<Map<String, dynamic>?> fetchCurrentConsent() async {
+    try {
+      final result = await _request('GET', '/legal/consent/me');
+      if (result is Map<String, dynamic>) {
+        return result;
+      }
+      return null;
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  Future<void> submitLegalConsent(Map<String, dynamic> payload) async {
+    await _request('PUT', '/legal/consent', body: payload);
+  }
+
+  Future<String> createArcoRequest({
+    required String type,
+    required String message,
+    String? contactEmail,
+  }) async {
+    final result = await _request('POST', '/arco-requests', body: {
+      'type': type,
+      'message': message,
+      if (contactEmail != null) 'contactEmail': contactEmail,
+    });
+    if (result is Map && result['id'] != null) {
+      return result['id'].toString();
+    }
+    throw ApiException(statusCode: 500, message: 'Invalid response creating ARCO request');
+  }
+
   Future<Map<String, dynamic>?> getWeatherForLocation(double lat, double lon) async {
     final apiKey = EnvConfig.instance.googleMapsApiKey;
     if (apiKey.isEmpty) {
@@ -248,9 +297,11 @@ class ApiService {
   Future<bool> health() async {
     final uri = _uri('/health');
     try {
-      final response = await _client.get(uri, headers: const {
-        'Content-Type': 'application/json',
-      });
+      final response = await _client
+          .get(uri, headers: const {
+            'Content-Type': 'application/json',
+          })
+          .timeout(const Duration(seconds: 5));
       if (response.statusCode >= 200 && response.statusCode < 300) {
         if (response.body.isEmpty) return false;
         final decoded = jsonDecode(response.body);
@@ -258,6 +309,8 @@ class ApiService {
           return decoded['ok'] == true;
         }
       }
+    } on TimeoutException {
+      return false;
     } catch (_) {}
     return false;
   }

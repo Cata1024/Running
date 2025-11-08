@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/design_system/territory_tokens.dart';
 
@@ -287,10 +288,12 @@ class _HeroIllustration extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.directions_run_rounded,
-              size: 50,
-              color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: SvgPicture.asset(
+                'assets/icons/running.svg',
+                colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+              ),
             ),
           ),
 

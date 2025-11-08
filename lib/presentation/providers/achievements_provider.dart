@@ -6,13 +6,7 @@ import 'package:running/domain/entities/achievement.dart';
 import 'package:running/domain/entities/run.dart';
 
 import '../../application/achievements/achievements_use_case.dart';
-import '../../data/repositories/achievements_repository.dart';
-import '../../domain/repositories/i_achievements_repository.dart';
 import 'app_providers.dart';
-
-final achievementsRepositoryProvider = Provider<IAchievementsRepository>((ref) {
-  return AchievementsRepository();
-});
 
 /// Carga el caso de uso de logros para el usuario actual.
 final achievementsUseCaseProvider =

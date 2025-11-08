@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/design_system/territory_tokens.dart';
@@ -385,10 +386,12 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.waving_hand,
-                  size: 50,
-                  color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: SvgPicture.asset(
+                    'assets/icons/running.svg',
+                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                  ),
                 ),
               ),
               

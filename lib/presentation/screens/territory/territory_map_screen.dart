@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/design_system/territory_tokens.dart';
-import '../../providers/app_providers.dart';
+import '../../providers/territory_provider.dart';
 import '../../../data/models/territory_dto.dart';
 
 /// Pantalla para visualizar el territorio conquistado en un mapa

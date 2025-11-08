@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Colores principales con mejor contraste y modernidad
@@ -329,88 +330,94 @@ class AppTheme {
     final baseTextColor = isDark ? Colors.white : Colors.grey[900];
     final secondaryTextColor = isDark ? Colors.white70 : Colors.grey[600];
 
-    const fontFamily = 'Inter';
+    TextStyle interTextStyle({
+      required double fontSize,
+      required FontWeight fontWeight,
+      double? letterSpacing,
+      double? height,
+      Color? color,
+    }) {
+      return GoogleFonts.inter(
+        textStyle: TextStyle(
+          fontSize: fontSize,
+          fontWeight: fontWeight,
+          letterSpacing: letterSpacing,
+          height: height,
+          color: color ?? baseTextColor,
+        ),
+      );
+    }
 
     return TextTheme(
-      displayLarge: const TextStyle(
-        fontFamily: fontFamily,
+      displayLarge: interTextStyle(
         fontSize: 57,
         fontWeight: FontWeight.w300,
         letterSpacing: -1.5,
         height: 1.1,
-      ).apply(color: baseTextColor),
-      displayMedium: const TextStyle(
-        fontFamily: fontFamily,
+      ),
+      displayMedium: interTextStyle(
         fontSize: 45,
         fontWeight: FontWeight.w300,
         letterSpacing: -0.5,
         height: 1.2,
-      ).apply(color: baseTextColor),
-      displaySmall: const TextStyle(
-        fontFamily: fontFamily,
+      ),
+      displaySmall: interTextStyle(
         fontSize: 36,
         fontWeight: FontWeight.w400,
         height: 1.3,
-      ).apply(color: baseTextColor),
-      headlineMedium: const TextStyle(
-        fontFamily: fontFamily,
+      ),
+      headlineMedium: interTextStyle(
         fontSize: 28,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.25,
-      ).apply(color: baseTextColor),
-      headlineSmall: const TextStyle(
-        fontFamily: fontFamily,
+      ),
+      headlineSmall: interTextStyle(
         fontSize: 24,
         fontWeight: FontWeight.w500,
-      ).apply(color: baseTextColor),
-      titleLarge: const TextStyle(
-        fontFamily: fontFamily,
+      ),
+      titleLarge: interTextStyle(
         fontSize: 20,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.15,
-      ).apply(color: baseTextColor),
-      titleMedium: const TextStyle(
-        fontFamily: fontFamily,
+      ),
+      titleMedium: interTextStyle(
         fontSize: 16,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.15,
-      ).apply(color: baseTextColor),
-      titleSmall: const TextStyle(
-        fontFamily: fontFamily,
+      ),
+      titleSmall: interTextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.1,
-      ).apply(color: baseTextColor),
-      bodyLarge: const TextStyle(
-        fontFamily: fontFamily,
+      ),
+      bodyLarge: interTextStyle(
         fontSize: 16,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.5,
-      ).apply(color: baseTextColor),
-      bodyMedium: const TextStyle(
-        fontFamily: fontFamily,
+      ),
+      bodyMedium: interTextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.25,
-      ).apply(color: secondaryTextColor),
-      bodySmall: const TextStyle(
-        fontFamily: fontFamily,
+        color: secondaryTextColor,
+      ),
+      bodySmall: interTextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w400,
         letterSpacing: 0.4,
-      ).apply(color: secondaryTextColor),
-      labelLarge: const TextStyle(
-        fontFamily: fontFamily,
+        color: secondaryTextColor,
+      ),
+      labelLarge: interTextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w600,
         letterSpacing: 1.25,
-      ).apply(color: baseTextColor),
-      labelSmall: const TextStyle(
-        fontFamily: fontFamily,
+      ),
+      labelSmall: interTextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w500,
         letterSpacing: 1.5,
-      ).apply(color: secondaryTextColor),
+        color: secondaryTextColor,
+      ),
     );
   }
 }

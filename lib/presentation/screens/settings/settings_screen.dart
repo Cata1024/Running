@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/design_system/territory_tokens.dart';
@@ -180,6 +181,15 @@ class SettingsScreen extends ConsumerWidget {
                         context,
                         MaterialPageRoute(builder: (_) => const PrivacySettingsScreen()),
                       );
+                    },
+                  ),
+                  _SettingsTile(
+                    icon: Icons.gavel_outlined,
+                    title: 'Consentimiento legal',
+                    subtitle: 'Políticas, términos y autorizaciones',
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      context.push('/legal-consent');
                     },
                   ),
                 ],

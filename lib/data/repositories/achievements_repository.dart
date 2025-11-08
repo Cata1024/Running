@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../domain/constants/achievements_catalog.dart';
 import '../../domain/repositories/i_achievements_repository.dart';
 
 class AchievementsRepository implements IAchievementsRepository {
@@ -127,5 +128,32 @@ class AchievementsRepository implements IAchievementsRepository {
     final prefs = await _prefs();
     final jsonString = jsonEncode(_progressToJson(snapshot.entries));
     await prefs.setString('achievements_$userId', jsonString);
+  }
+
+  @override
+  Future<void> bootstrapCatalogIfNeeded(String userId) async {
+    final snapshot = await fetchRemoteSnapshot(userId);
+    if (snapshot.entries.isNotEmpty) {
+      return;
+    }
+
+    final catalogEntries = AchievementsCatalog.allAchievements.fold<
+        Map<String, AchievementProgress>>({}, (acc, achievement) {
+      acc[achievement.id] = const AchievementProgress(
+        currentValue: 0,
+        isUnlocked: false,
+        unlockedAt: null,
+      );
+      return acc;
+    });
+
+    final bootstrapSnapshot = AchievementsSnapshot(entries: catalogEntries);
+    await saveRemoteSnapshot(
+      userId,
+      bootstrapSnapshot,
+      totalXp: 0,
+      unlockedCount: 0,
+    );
+    await saveCachedSnapshot(userId, bootstrapSnapshot);
   }
 }

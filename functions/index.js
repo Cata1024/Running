@@ -77,6 +77,15 @@ const mapRunDocument = (doc) => {
   return { id: _id.toString(), ...rest };
 };
 
+const mapDocumentWithId = (doc) => {
+  if (!doc) return null;
+  const { _id, ...rest } = doc;
+  return {
+    id: typeof _id === "object" && _id !== null && typeof _id.toString === "function" ? _id.toString() : _id,
+    ...rest,
+  };
+};
+
 const parseObjectId = (value) => {
   if (typeof value !== "string") return null;
   if (!ObjectId.isValid(value)) return null;
@@ -147,9 +156,107 @@ const allowedProfileFields = [
   "updatedAt",
 ];
 
+const allowedConsentFields = [
+  "termsVersion",
+  "privacyVersion",
+  "locationConsent",
+  "analyticsConsent",
+  "marketingConsent",
+  "ageConfirmed",
+  "acceptedAt",
+  "source",
+];
+
+const VALID_ARCO_TYPES = ["access", "rectify", "delete", "revoke"];
+const VALID_ARCO_STATUSES = ["open", "in_progress", "closed"];
+
+const ADMIN_UIDS = new Set(
+  (process.env.ADMIN_UIDS || "")
+    .split(",")
+    .map((uid) => uid.trim())
+    .filter((uid) => uid.length > 0),
+);
+
+const PUBLIC_GET_PATHS = new Set(["/legal/documents"]);
+
 const isFiniteNumber = (value) => typeof value === "number" && Number.isFinite(value);
 const isBoolean = (value) => typeof value === "boolean";
 const isIsoString = (value) => typeof value === "string" && !Number.isNaN(Date.parse(value));
+
+const isAdminUid = (uid) => uid && ADMIN_UIDS.has(uid);
+
+const sanitizeConsentPayload = (payload) => {
+  const sanitized = {};
+  allowedConsentFields.forEach((field) => {
+    if (payload[field] !== undefined) sanitized[field] = payload[field];
+  });
+  return sanitized;
+};
+
+const validateConsentPayload = (payload) => {
+  const errors = [];
+  if (!payload.termsVersion || typeof payload.termsVersion !== "string") {
+    errors.push("termsVersion is required");
+  }
+  if (!payload.privacyVersion || typeof payload.privacyVersion !== "string") {
+    errors.push("privacyVersion is required");
+  }
+  if (!isBoolean(payload.locationConsent) || !payload.locationConsent) {
+    errors.push("locationConsent must be true");
+  }
+  if (!isBoolean(payload.ageConfirmed) || !payload.ageConfirmed) {
+    errors.push("ageConfirmed must be true");
+  }
+  ["analyticsConsent", "marketingConsent"].forEach((field) => {
+    if (payload[field] !== undefined && !isBoolean(payload[field])) {
+      errors.push(`${field} must be a boolean`);
+    }
+  });
+  if (payload.acceptedAt !== undefined && !isIsoString(payload.acceptedAt)) {
+    errors.push("acceptedAt must be an ISO string");
+  }
+  if (payload.source !== undefined && typeof payload.source !== "string") {
+    errors.push("source must be a string");
+  }
+  return errors;
+};
+
+const validateArcoPayload = (payload) => {
+  const errors = [];
+  if (!payload.type || typeof payload.type !== "string" || !VALID_ARCO_TYPES.includes(payload.type)) {
+    errors.push(`type must be one of ${VALID_ARCO_TYPES.join(", ")}`);
+  }
+  if (payload.message === undefined || typeof payload.message !== "string" || payload.message.trim().length === 0) {
+    errors.push("message is required");
+  }
+  if (payload.contactEmail !== undefined && typeof payload.contactEmail !== "string") {
+    errors.push("contactEmail must be a string");
+  }
+  return errors;
+};
+
+const validateArcoUpdatePayload = (payload) => {
+  const errors = [];
+  if (payload.status !== undefined && !VALID_ARCO_STATUSES.includes(payload.status)) {
+    errors.push(`status must be one of ${VALID_ARCO_STATUSES.join(", ")}`);
+  }
+  if (payload.notes !== undefined && typeof payload.notes !== "string") {
+    errors.push("notes must be a string");
+  }
+  if (payload.handlerUserId !== undefined && typeof payload.handlerUserId !== "string") {
+    errors.push("handlerUserId must be a string");
+  }
+  return errors;
+};
+
+const getClientInfo = (req) => {
+  const forwardedFor = req.headers["x-forwarded-for"];
+  const ip = typeof forwardedFor === "string" && forwardedFor.length > 0
+    ? forwardedFor.split(",")[0].trim()
+    : req.ip;
+  const userAgent = typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : null;
+  return { ipAddress: ip, userAgent };
+};
 
 const validateLineString = (value) => {
   if (!isPlainObject(value)) return "routeGeoJson must be an object";
@@ -397,6 +504,7 @@ const getAuthContext = (req) => {
 // 🔐 Middleware de autenticación con Firebase Auth + Google ID tokens
 app.use(async (req, res, next) => {
   if (req.path === "/health") return next();
+  if (req.method === "GET" && PUBLIC_GET_PATHS.has(req.path)) return next();
   if (req.method === "OPTIONS") return res.sendStatus(204);
 
   try {
@@ -451,6 +559,10 @@ app.use(async (req, res, next) => {
 const collectionUsers = "users";
 const collectionRuns = "runs";
 const collectionTerritory = "territory";
+const collectionLegalDocuments = "legal_documents";
+const collectionLegalConsents = "legal_consents";
+const collectionLegalConsentHistory = "legal_consent_history";
+const collectionArcoRequests = "arco_requests";
 
 // Rutas
 app.get("/health", async (_req, res) => {
@@ -563,6 +675,214 @@ app.put("/territory/:uid", async (req, res) => {
 
   await territoryCollection.updateOne({ _id: targetUid }, { $set: payload }, { upsert: true });
   res.json({ success: true });
+});
+
+// ========= LEGAL & COMPLIANCE =========
+
+app.get("/legal/documents", async (_req, res) => {
+  try {
+    const documentsCollection = await getCollection(collectionLegalDocuments);
+    const documents = await documentsCollection.find({}).sort({ publishedAt: -1 }).toArray();
+    res.json(documents.map(mapDocumentWithId));
+  } catch (error) {
+    logger.error("Failed to list legal documents", error);
+    res.status(500).json({ error: "Failed to fetch legal documents" });
+  }
+});
+
+app.get("/legal/consent/me", async (req, res) => {
+  const { uid } = getAuthContext(req);
+  if (!uid) return res.status(401).json({ error: "Unauthorized" });
+  try {
+    const legalConsents = await getCollection(collectionLegalConsents);
+    const doc = await legalConsents.findOne({ userId: uid });
+    if (!doc) return res.status(404).json({ error: "Consent not found" });
+    res.json(toPlainObject(doc));
+  } catch (error) {
+    logger.error("Failed to fetch consent", error);
+    res.status(500).json({ error: "Failed to fetch consent" });
+  }
+});
+
+app.put("/legal/consent", async (req, res) => {
+  const { uid } = getAuthContext(req);
+  if (!uid) return res.status(401).json({ error: "Unauthorized" });
+
+  const invalid = ensureBodyObject(req.body);
+  if (invalid) return res.status(400).json({ error: invalid });
+
+  const sanitized = sanitizeConsentPayload(req.body);
+  const errors = validateConsentPayload(sanitized);
+  if (errors.length > 0) {
+    return res.status(400).json({ error: "Invalid consent payload", details: errors });
+  }
+
+  const { ipAddress, userAgent } = getClientInfo(req);
+  const now = new Date();
+  const acceptedAtIso = sanitized.acceptedAt ? new Date(sanitized.acceptedAt).toISOString() : now.toISOString();
+
+  const consentDocument = {
+    userId: uid,
+    termsVersion: sanitized.termsVersion,
+    privacyVersion: sanitized.privacyVersion,
+    locationConsent: sanitized.locationConsent,
+    analyticsConsent: sanitized.analyticsConsent ?? false,
+    marketingConsent: sanitized.marketingConsent ?? false,
+    ageConfirmed: sanitized.ageConfirmed,
+    acceptedAt: acceptedAtIso,
+    source: sanitized.source ?? "mobile_app",
+    ipAddress,
+    userAgent,
+    updatedAt: now.toISOString(),
+  };
+
+  try {
+    const legalConsents = await getCollection(collectionLegalConsents);
+    const legalConsentHistory = await getCollection(collectionLegalConsentHistory);
+
+    const existing = await legalConsents.findOne({ userId: uid });
+    const createdAt = existing?.createdAt ?? now.toISOString();
+
+    await legalConsents.updateOne(
+      { userId: uid },
+      {
+        $set: {
+          ...consentDocument,
+          createdAt,
+        },
+      },
+      { upsert: true },
+    );
+
+    await legalConsentHistory.insertOne({
+      ...consentDocument,
+      createdAt,
+      recordedAt: now.toISOString(),
+    });
+
+    res.json({
+      success: true,
+      consent: {
+        ...consentDocument,
+        createdAt,
+      },
+    });
+  } catch (error) {
+    logger.error("Failed to persist consent", error);
+    res.status(500).json({ error: "Failed to save consent" });
+  }
+});
+
+app.post("/arco-requests", async (req, res) => {
+  const { uid } = getAuthContext(req);
+  if (!uid) return res.status(401).json({ error: "Unauthorized" });
+
+  const invalid = ensureBodyObject(req.body);
+  if (invalid) return res.status(400).json({ error: invalid });
+
+  const errors = validateArcoPayload(req.body);
+  if (errors.length > 0) {
+    return res.status(400).json({ error: "Invalid ARCO payload", details: errors });
+  }
+
+  const { ipAddress, userAgent } = getClientInfo(req);
+  const nowIso = new Date().toISOString();
+
+  const arcoDoc = {
+    userId: uid,
+    type: req.body.type,
+    message: req.body.message.trim(),
+    contactEmail: req.body.contactEmail ?? null,
+    status: "open",
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    ipAddress,
+    userAgent,
+  };
+
+  try {
+    const arcoCollection = await getCollection(collectionArcoRequests);
+    const result = await arcoCollection.insertOne(arcoDoc);
+    const insertedId = result.insertedId?.toString?.() ?? result.insertedId;
+    logger.info("ARCO request created", { userId: uid, id: insertedId, type: arcoDoc.type });
+    res.status(201).json({ success: true, id: insertedId });
+  } catch (error) {
+    logger.error("Failed to create ARCO request", error);
+    res.status(500).json({ error: "Failed to create ARCO request" });
+  }
+});
+
+app.get("/arco-requests", async (req, res) => {
+  const { uid } = getAuthContext(req);
+  if (!uid || !isAdminUid(uid)) return res.status(403).json({ error: "Forbidden" });
+
+  try {
+    const filter = {};
+    if (typeof req.query.type === "string" && VALID_ARCO_TYPES.includes(req.query.type)) {
+      filter.type = req.query.type;
+    }
+    if (typeof req.query.status === "string" && VALID_ARCO_STATUSES.includes(req.query.status)) {
+      filter.status = req.query.status;
+    }
+
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const arcoCollection = await getCollection(collectionArcoRequests);
+    const cursor = arcoCollection.find(filter).sort({ createdAt: -1 }).limit(limit);
+    const results = await cursor.toArray();
+    res.json(results.map(mapDocumentWithId));
+  } catch (error) {
+    logger.error("Failed to list ARCO requests", error);
+    res.status(500).json({ error: "Failed to list ARCO requests" });
+  }
+});
+
+app.patch("/arco-requests/:id", async (req, res) => {
+  const { uid } = getAuthContext(req);
+  if (!uid || !isAdminUid(uid)) return res.status(403).json({ error: "Forbidden" });
+
+  const invalid = ensureBodyObject(req.body);
+  if (invalid) return res.status(400).json({ error: invalid });
+
+  const errors = validateArcoUpdatePayload(req.body);
+  if (errors.length > 0) {
+    return res.status(400).json({ error: "Invalid ARCO update payload", details: errors });
+  }
+
+  const objectId = parseObjectId(req.params.id);
+  if (!objectId) return res.status(404).json({ error: "ARCO request not found" });
+
+  const updates = {};
+  if (req.body.status) {
+    updates.status = req.body.status;
+  }
+  if (req.body.notes !== undefined) {
+    updates.notes = req.body.notes;
+  }
+  if (req.body.handlerUserId !== undefined) {
+    updates.handlerUserId = req.body.handlerUserId;
+  } else if (req.body.status) {
+    updates.handlerUserId = uid;
+  }
+
+  const nowIso = new Date().toISOString();
+  updates.updatedAt = nowIso;
+  if (updates.status === "closed") {
+    updates.closedAt = nowIso;
+  }
+
+  try {
+    const arcoCollection = await getCollection(collectionArcoRequests);
+    const result = await arcoCollection.findOneAndUpdate(
+      { _id: objectId },
+      { $set: updates },
+      { returnDocument: "after" },
+    );
+    if (!result.value) return res.status(404).json({ error: "ARCO request not found" });
+    res.json({ success: true, request: mapDocumentWithId(result.value) });
+  } catch (error) {
+    logger.error("Failed to update ARCO request", error);
+    res.status(500).json({ error: "Failed to update ARCO request" });
+  }
 });
 
 app.get("/runs", async (req, res) => {

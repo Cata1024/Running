@@ -2,12 +2,22 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../repositories/i_auth_repository.dart';
+
 /// Servicio para funcionalidades de Firebase Enterprise
 class FirebaseEnterpriseService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseFunctions _functions =
-      FirebaseFunctions.instanceFor(region: 'southamerica-west1');
+  FirebaseEnterpriseService({
+    required IAuthRepository authRepository,
+    FirebaseFunctions? functions,
+    FirebaseFirestore? firestore,
+  })  : _authRepository = authRepository,
+        _firestore = firestore ?? FirebaseFirestore.instance,
+        _functions =
+            functions ?? FirebaseFunctions.instanceFor(region: 'southamerica-west1');
+
+  final IAuthRepository _authRepository;
+  final FirebaseFirestore _firestore;
+  final FirebaseFunctions _functions;
 
   /// Exporta todos los datos del usuario usando Cloud Function
   /// Retorna un Map con 'downloadUrl' y 'fileSize'
@@ -87,12 +97,22 @@ class FirebaseEnterpriseService {
   /// Esto dispara la Firebase Extension "delete-user-data" si está configurada
   Future<void> deleteUserAccount() async {
     try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw FirebaseEnterpriseException('Usuario no autenticado');
-      }
-      
-      await user.delete();
+      final result = await _authRepository.deleteAccount();
+      result.fold(
+        (failure) {
+          if (failure.code == 'requires-recent-login') {
+            throw FirebaseEnterpriseException(
+              failure.message,
+              code: failure.code,
+            );
+          }
+          throw FirebaseEnterpriseException(
+            failure.message,
+            code: failure.code,
+          );
+        },
+        (_) {},
+      );
     } on FirebaseAuthException catch (e) {
       if (e.code == 'requires-recent-login') {
         throw FirebaseEnterpriseException(
@@ -112,17 +132,22 @@ class FirebaseEnterpriseService {
   /// Re-autentica al usuario con sus credenciales
   Future<void> reauthenticateUser(String password) async {
     try {
-      final user = _auth.currentUser;
-      if (user == null || user.email == null) {
-        throw FirebaseEnterpriseException('Usuario no autenticado');
-      }
-      
-      final credential = EmailAuthProvider.credential(
-        email: user.email!,
-        password: password,
+      final result = await _authRepository.reauthenticateWithPassword(password);
+      result.fold(
+        (failure) {
+          if (failure.code == 'wrong-password') {
+            throw FirebaseEnterpriseException(
+              failure.message,
+              code: 'wrong-password',
+            );
+          }
+          throw FirebaseEnterpriseException(
+            failure.message,
+            code: failure.code,
+          );
+        },
+        (_) {},
       );
-      
-      await user.reauthenticateWithCredential(credential);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'wrong-password') {
         throw FirebaseEnterpriseException(

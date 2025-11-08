@@ -14,12 +14,18 @@ import '../../domain/entities/territory.dart';
 import '../../domain/services/circuit_closure_validator.dart';
 import '../../domain/services/territory_service.dart';
 import '../../domain/track_processing/track_processing.dart';
+import '../../domain/entities/storage_resource.dart';
+import '../../core/services/audit_logger.dart';
+import '../../data/services/api_service.dart';
 import 'achievements_provider.dart';
 import 'app_providers.dart';
+import 'territory_provider.dart';
 
 part 'run_tracker_provider.g.dart';
 
 enum GpsStatus { initial, strong, medium, weak }
+
+typedef RunSaveResult = ({bool success, String? message});
 
 class RunState {
   final bool isRunning;
@@ -235,137 +241,156 @@ class RunTracker extends _$RunTracker {
     state = state.copyWith(isHudCollapsed: !state.isHudCollapsed);
   }
 
-  Future<void> stopAndSaveRun({Map<String, dynamic>? conditions}) async {
+  Future<RunSaveResult> stopAndSaveRun({Map<String, dynamic>? conditions}) async {
     // 1. Detener timers y streams
     stopRun();
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || state.startedAt == null) return;
+    if (uid == null || state.startedAt == null) {
+      return (success: false, message: 'Sesión inválida. Inicia sesión nuevamente.');
+    }
 
     final endedAt = DateTime.now();
     final routeProcessor = RouteProcessor();
 
-    // 2. Procesar la ruta final con máxima compresión
-    final finalResult = await routeProcessor.processRoute(
-      rawPoints: state.routePoints,
-      config: const RouteProcessingConfig.storage(),
-    );
-
-    // 3. Procesamiento legacy para compatibilidad
-    final processing = await processTrackPipeline(state.rawTrack);
-    final processedTrack = processing.simplifiedTrack.isNotEmpty
-        ? processing.simplifiedTrack
-        : state.rawTrack;
-
-    // 4. Actualizar estado con la ruta final (opcional, la UI ya debería tenerla)
-    state = state.copyWith(
-      smoothedRoute: finalResult.smoothedPoints,
-      routePoints: finalResult.simplifiedPoints,
-    );
-
-    // 5. Validar si es un circuito cerrado
-    final isClosed = const CircuitClosureValidator().isClosedCircuit(
-      routePoints: processedTrack,
-      duration: state.elapsedTime,
-    );
-
-    // 6. Calcular y unir territorio si aplica
-    Map<String, dynamic>? polygonGeoJson;
-    double? areaGainedM2;
-    Territory? updatedTerritory;
-    final territoryService = const TerritoryService();
-    if (isClosed && processedTrack.length >= 3) {
-      polygonGeoJson = territoryService.buildPolygonFromTrack(processedTrack);
-      areaGainedM2 = territoryService.polygonAreaM2(polygonGeoJson);
-      final existingTerritoryDto = await ref.read(userTerritoryDtoProvider.future);
-      final existingTerritory = existingTerritoryDto == null
-          ? null
-          : Territory.fromMap(
-              existingTerritoryDto.id,
-              existingTerritoryDto.toMap(),
-            );
-      updatedTerritory = territoryService.mergeTerritory(
-        existing: existingTerritory,
-        userId: uid,
-        newPolygon: polygonGeoJson,
-        areaGainedM2: areaGainedM2,
-      );
-    }
-
-    // 7. Calcular estadísticas finales
-    final distanceMeters = processing.distanceMeters > 0
-        ? processing.distanceMeters
-        : (state.totalDistance * 1000);
-    final movingTimeSeconds = processing.movingTimeSeconds > 0
-        ? processing.movingTimeSeconds
-        : state.elapsedTime.inSeconds;
-    final distanceKm = distanceMeters / 1000;
-    final avgPaceSecPerKm =
-        distanceKm > 0 ? (movingTimeSeconds / distanceKm) : null;
-
-    // 8. Subir artefactos a Storage
-    final routeGeoJson = territoryService.buildLineStringFromTrack(processedTrack);
-    final storageInfo = await _uploadTrackArtifacts(uid, processing);
-
-    // 9. Preparar el payload para la API
-    final runData = {
-      'userId': uid,
-      'startedAt': state.startedAt!.toIso8601String(),
-      'endedAt': endedAt.toIso8601String(),
-      'distanceM': distanceMeters.round(),
-      'durationS': movingTimeSeconds,
-      'isClosedCircuit': isClosed,
-      'startLat': processedTrack.isNotEmpty ? processedTrack.first.lat : state.currentLocation!.latitude,
-      'startLon': processedTrack.isNotEmpty ? processedTrack.first.lon : state.currentLocation!.longitude,
-      'endLat': processedTrack.isNotEmpty ? processedTrack.last.lat : state.currentLocation!.latitude,
-      'endLon': processedTrack.isNotEmpty ? processedTrack.last.lon : state.currentLocation!.longitude,
-      'routeGeoJson': routeGeoJson,
-      'summaryPolyline': processing.summaryPolyline,
-      'polyline': finalResult.encodedPolyline,
-      'processingStats': {
-        'originalPoints': finalResult.stats.originalPoints,
-        'processedPoints': finalResult.stats.processedPoints,
-        'reductionRate': finalResult.stats.reductionRate,
-      },
-      'simplification': processing.simplificationMetadata,
-      'storage': storageInfo,
-      'conditions': conditions ?? {'terrain': null, 'mood': null},
-      'gainedAreaM2': areaGainedM2,
-      'avgPace': avgPaceSecPerKm,
-    };
-
-    // 10. Enviar a la API
-    final api = ref.read(apiServiceProvider);
-    final runId = await api.createRun(runData);
-
-    // 11. Actualizar territorio y perfil de usuario
-    if (updatedTerritory != null) {
-      await api.upsertTerritory(uid, updatedTerritory.toPersistenceMap());
-    }
-
-    // La lógica para actualizar el perfil del usuario (total de área, etc.)
-    // se ha simplificado o movido al backend. Por ahora, solo invalidamos
-    // los providers para que la UI se refresque.
-
-    // 12. Invalidar caches
-    ref.invalidate(userRunsDtoProvider);
-    ref.invalidate(runDocDtoProvider(runId));
-    ref.invalidate(userTerritoryDtoProvider);
-
-    // 13. Procesar logros
     try {
-      final runModel = models.Run(
-        id: runId,
-        startTime: state.startedAt!,
-        durationSeconds: movingTimeSeconds,
-        distanceMeters: distanceMeters,
-        avgSpeedKmh: movingTimeSeconds > 0 ? (distanceMeters / movingTimeSeconds) * 3.6 : 0,
-        territoryCovered: (areaGainedM2 ?? 0) > 0 ? 1 : 0,
-        isClosed: isClosed,
+      // 2. Procesar la ruta final con máxima compresión
+      final finalResult = await routeProcessor.processRoute(
+        rawPoints: state.routePoints,
+        config: const RouteProcessingConfig.storage(),
       );
-      await processRunAchievements(ref, runModel);
-    } catch (e) {
-      debugPrint('Error procesando logros: $e');
+
+      // 3. Procesamiento legacy para compatibilidad
+      final processing = await processTrackPipeline(state.rawTrack);
+      final processedTrack = processing.simplifiedTrack.isNotEmpty
+          ? processing.simplifiedTrack
+          : state.rawTrack;
+
+      // 4. Actualizar estado con la ruta final (opcional, la UI ya debería tenerla)
+      state = state.copyWith(
+        smoothedRoute: finalResult.smoothedPoints,
+        routePoints: finalResult.simplifiedPoints,
+      );
+
+      // 5. Validar si es un circuito cerrado
+      final isClosed = const CircuitClosureValidator().isClosedCircuit(
+        routePoints: processedTrack,
+        duration: state.elapsedTime,
+      );
+
+      // 6. Calcular y unir territorio si aplica
+      Map<String, dynamic>? polygonGeoJson;
+      double? areaGainedM2;
+      Territory? updatedTerritory;
+      final territoryService = const TerritoryService();
+      if (isClosed && processedTrack.length >= 3) {
+        polygonGeoJson = territoryService.buildPolygonFromTrack(processedTrack);
+        areaGainedM2 = territoryService.polygonAreaM2(polygonGeoJson);
+        final territoryUseCase = await ref.read(territoryUseCaseProvider.future);
+        updatedTerritory = await territoryUseCase.mergeAndSaveFromPolygon(
+          newPolygon: polygonGeoJson,
+          areaGainedM2: areaGainedM2,
+        );
+      }
+
+      // 7. Calcular estadísticas finales
+      final distanceMeters = processing.distanceMeters > 0
+          ? processing.distanceMeters
+          : (state.totalDistance * 1000);
+      final movingTimeSeconds = processing.movingTimeSeconds > 0
+          ? processing.movingTimeSeconds
+          : state.elapsedTime.inSeconds;
+      final distanceKm = distanceMeters / 1000;
+      final avgPaceSecPerKm =
+          distanceKm > 0 ? (movingTimeSeconds / distanceKm) : null;
+
+      // 8. Subir artefactos a Storage
+      final routeGeoJson = territoryService.buildLineStringFromTrack(processedTrack);
+      final storageInfo = await _uploadTrackArtifacts(uid, processing);
+
+      // 9. Preparar el payload para la API
+      final runData = {
+        'userId': uid,
+        'startedAt': state.startedAt!.toIso8601String(),
+        'endedAt': endedAt.toIso8601String(),
+        'distanceM': distanceMeters.round(),
+        'durationS': movingTimeSeconds,
+        'isClosedCircuit': isClosed,
+        'startLat': processedTrack.isNotEmpty ? processedTrack.first.lat : state.currentLocation!.latitude,
+        'startLon': processedTrack.isNotEmpty ? processedTrack.first.lon : state.currentLocation!.longitude,
+        'endLat': processedTrack.isNotEmpty ? processedTrack.last.lat : state.currentLocation!.latitude,
+        'endLon': processedTrack.isNotEmpty ? processedTrack.last.lon : state.currentLocation!.longitude,
+        'routeGeoJson': routeGeoJson,
+        'summaryPolyline': processing.summaryPolyline,
+        'polyline': finalResult.encodedPolyline,
+        'processingStats': {
+          'originalPoints': finalResult.stats.originalPoints,
+          'processedPoints': finalResult.stats.processedPoints,
+          'reductionRate': finalResult.stats.reductionRate,
+        },
+        'simplification': processing.simplificationMetadata,
+        'storage': storageInfo,
+        'conditions': conditions ?? {'terrain': null, 'mood': null},
+        'gainedAreaM2': areaGainedM2,
+        'avgPace': avgPaceSecPerKm,
+      };
+
+      // 10. Enviar a la API
+      final api = ref.read(apiServiceProvider);
+      final runId = await api.createRun(runData);
+
+      // 11. Actualizar territorio y perfil de usuario
+      if (updatedTerritory != null) {
+        ref.invalidate(territoryUseCaseProvider);
+        ref.invalidate(userTerritoryProvider);
+      }
+
+      // 12. Invalidar caches
+      ref.invalidate(userRunsDtoProvider);
+      ref.invalidate(runDocDtoProvider(runId));
+      ref.invalidate(userTerritoryProvider);
+
+      // 13. Procesar logros
+      try {
+        final runModel = models.Run(
+          id: runId,
+          startTime: state.startedAt!,
+          durationSeconds: movingTimeSeconds,
+          distanceMeters: distanceMeters,
+          avgSpeedKmh: movingTimeSeconds > 0 ? (distanceMeters / movingTimeSeconds) * 3.6 : 0,
+          territoryCovered: (areaGainedM2 ?? 0) > 0 ? 1 : 0,
+          isClosed: isClosed,
+        );
+        await processRunAchievements(ref, runModel);
+      } catch (e) {
+        debugPrint('Error procesando logros: $e');
+      }
+
+      // 14. Registrar auditoría del guardado de carrera
+      final auditLogger = ref.read(auditLoggerProvider);
+      await auditLogger.log('run.saved', {
+        'runId': runId,
+        'uid': uid,
+        'distanceMeters': distanceMeters,
+        'durationSeconds': movingTimeSeconds,
+        'closedCircuit': isClosed,
+        'gainedAreaM2': areaGainedM2,
+      });
+
+      return (success: true, message: null);
+    } on ApiException catch (e) {
+      debugPrint('Error API guardando carrera: ${e.message}');
+      return (
+        success: false,
+        message: 'No se pudo guardar la carrera (código ${e.statusCode}). Intenta nuevamente.',
+      );
+    } catch (e, st) {
+      debugPrint('Error guardando carrera: $e');
+      debugPrintStack(stackTrace: st);
+      return (
+        success: false,
+        message: 'No se pudo guardar la carrera. Verifica tu conexión e inténtalo de nuevo.',
+      );
     }
   }
 
@@ -401,7 +426,7 @@ class RunTracker extends _$RunTracker {
       };
     }
 
-    final storage = ref.read(storageServiceProvider);
+    final storage = ref.read(storageRepositoryProvider);
     final timestampKey = state.startedAt?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch;
     final basePath = 'runs/$uid/$timestampKey';
     final info = <String, dynamic>{
@@ -421,13 +446,15 @@ class RunTracker extends _$RunTracker {
       final gpx = _buildRawGpx(state.rawTrack);
       final rawPath = '$basePath/raw.gpx';
       final rawBytes = Uint8List.fromList(utf8.encode(gpx));
-      final rawUrl = await storage.uploadBytes(
-        path: rawPath,
-        data: rawBytes,
-        contentType: 'application/gpx+xml',
+      final rawResult = await storage.upload(
+        StorageUploadRequest(
+          path: rawPath,
+          bytes: rawBytes,
+          contentType: 'application/gpx+xml',
+        ),
       );
-      info['rawTrackPath'] = rawPath;
-      info['rawTrackUrl'] = rawUrl;
+      info['rawTrackPath'] = rawResult.path;
+      info['rawTrackUrl'] = rawResult.downloadUrl;
     } catch (e) {
       debugPrint('Error uploading raw track GPX: $e');
     }
@@ -436,13 +463,15 @@ class RunTracker extends _$RunTracker {
       final detailedJson = jsonEncode(processing.simplificationMetadata);
       final detailedPath = '$basePath/detailed.json';
       final detailedBytes = Uint8List.fromList(utf8.encode(detailedJson));
-      final detailedUrl = await storage.uploadBytes(
-        path: detailedPath,
-        data: detailedBytes,
-        contentType: 'application/json',
+      final detailedResult = await storage.upload(
+        StorageUploadRequest(
+          path: detailedPath,
+          bytes: detailedBytes,
+          contentType: 'application/json',
+        ),
       );
-      info['detailedTrackPath'] = detailedPath;
-      info['detailedTrackUrl'] = detailedUrl;
+      info['detailedTrackPath'] = detailedResult.path;
+      info['detailedTrackUrl'] = detailedResult.downloadUrl;
     } catch (e) {
       debugPrint('Error uploading detailed track JSON: $e');
     }

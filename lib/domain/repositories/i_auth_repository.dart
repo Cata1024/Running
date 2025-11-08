@@ -34,10 +34,13 @@ abstract class IAuthRepository {
   
   /// Cerrar sesión
   Future<Either<AuthFailure, Unit>> signOut();
-  
+
   /// Restablecer contraseña
   Future<Either<AuthFailure, Unit>> resetPassword(String email);
-  
+
+  /// Reautenticar al usuario con su contraseña actual para operaciones sensibles
+  Future<Either<AuthFailure, Unit>> reauthenticateWithPassword(String password);
+
   /// Verificar email
   Future<Either<AuthFailure, Unit>> verifyEmail();
   

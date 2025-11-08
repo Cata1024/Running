@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+
 import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/widgets/aero_widgets.dart';
 import '../../../domain/services/firebase_enterprise_service.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/settings_provider.dart';
+import '../../../data/repositories/auth_repository.dart' show authRepositoryProvider;
 import 'home_filter_settings_screen.dart';
 
 class PrivacySettingsScreen extends ConsumerWidget {
@@ -259,7 +261,7 @@ class PrivacySettingsScreen extends ConsumerWidget {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: () => _showExportDataDialog(context),
+                    onPressed: () => _showExportDataDialog(context, ref),
                     icon: const Icon(Icons.download),
                     label: const Text('Exportar mis datos'),
                   ),
@@ -333,7 +335,7 @@ class PrivacySettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showExportDataDialog(BuildContext context) {
+  void _showExportDataDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -348,7 +350,7 @@ class PrivacySettingsScreen extends ConsumerWidget {
             child: const Text('Cancelar'),
           ),
           FilledButton(
-            onPressed: () => _exportUserData(context),
+            onPressed: () => _exportUserData(context, ref),
             child: const Text('Exportar'),
           ),
         ],
@@ -414,11 +416,17 @@ class PrivacySettingsScreen extends ConsumerWidget {
     }
   }
   
-  Future<void> _exportUserData(BuildContext context) async {
-    final service = FirebaseEnterpriseService();
+  FirebaseEnterpriseService _enterpriseService(WidgetRef ref) {
+    return FirebaseEnterpriseService(
+      authRepository: ref.read(authRepositoryProvider),
+    );
+  }
+
+  Future<void> _exportUserData(BuildContext context, WidgetRef ref) async {
+    final service = _enterpriseService(ref);
     
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = ref.read(authRepositoryProvider).currentUser;
       if (user == null) {
         if (context.mounted) {
           Navigator.pop(context);
@@ -453,7 +461,7 @@ class PrivacySettingsScreen extends ConsumerWidget {
       );
       
       // Llamar servicio Enterprise para exportar datos
-      final result = await service.exportUserData(user.uid);
+      final result = await service.exportUserData(user.id);
       final downloadUrl = result['downloadUrl'] as String;
       final fileSize = result['fileSize'] as String;
       
@@ -523,10 +531,10 @@ class PrivacySettingsScreen extends ConsumerWidget {
   }
   
   Future<void> _deleteUserData(BuildContext context, WidgetRef ref) async {
-    final service = FirebaseEnterpriseService();
+    final service = _enterpriseService(ref);
     
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = ref.read(authRepositoryProvider).currentUser;
       if (user == null) {
         if (context.mounted) {
           Navigator.pop(context);
@@ -577,8 +585,8 @@ class PrivacySettingsScreen extends ConsumerWidget {
       // Re-autenticar usuario
       await service.reauthenticateUser(password);
       
-      // Eliminar todos los datos de Firestore PRIMERO
-      await service.deleteUserDataFromFirestore(user.uid);
+      // Eliminar datos de Firestore y Storage antes de la cuenta
+      await service.deleteUserDataFromFirestore(user.id);
       
       // Eliminar cuenta de Firebase Auth
       // Esto dispara Firebase Extension "delete-user-data" si está configurada

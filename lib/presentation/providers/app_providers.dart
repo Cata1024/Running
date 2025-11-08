@@ -1,14 +1,23 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../data/repositories/level_progress_repository.dart';
+import '../../data/repositories/achievements_repository.dart';
+import '../../data/repositories/storage_repository.dart';
 import '../../data/services/api_service.dart';
 import '../../data/services/firebase_auth_service.dart';
+import '../../core/services/audit_logger.dart';
 import '../../data/models/user_profile_dto.dart';
-import '../../data/models/territory_dto.dart';
 import '../../data/models/run_dto.dart';
 import '../../core/map_icons.dart';
-import '../../domain/services/storage_service.dart';
+import '../../domain/entities/legal_consent.dart';
+import '../../domain/repositories/i_level_progress_repository.dart';
+import '../../domain/repositories/i_achievements_repository.dart';
+import '../../domain/repositories/i_storage_repository.dart';
 
 export 'settings_provider.dart' show settingsProvider;
 
@@ -185,14 +194,41 @@ final apiHealthProvider = FutureProvider.autoDispose<bool>((ref) async {
   return api.health();
 });
 
-final storageServiceProvider = Provider<StorageService>((ref) {
-  return StorageService();
+final levelProgressRepositoryProvider = Provider<ILevelProgressRepository>((ref) {
+  return LevelProgressRepository(
+    firestore: ref.watch(firestoreProvider),
+  );
+});
+
+final achievementsRepositoryProvider = Provider<IAchievementsRepository>((ref) {
+  return AchievementsRepository(
+    firestore: ref.watch(firestoreProvider),
+  );
+});
+
+final storageRepositoryProvider = Provider<IStorageRepository>((ref) {
+  return FirebaseStorageRepository();
+});
+
+/// Headers autenticados para peticiones directas (e.g. imágenes protegidas)
+final apiAuthHeadersProvider = FutureProvider<Map<String, String>>((ref) async {
+  final api = ref.watch(apiServiceProvider);
+  return api.authHeaders;
+});
+
+final firestoreProvider = Provider<FirebaseFirestore>((_) {
+  final app = Firebase.app();
+  return FirebaseFirestore.instanceFor(app: app, databaseId: 'territory-run-db');
 });
 
 /// Firebase Auth Service Provider
 final authServiceProvider = Provider<FirebaseAuthService>((ref) {
   final apiService = ref.watch(apiServiceProvider);
-  return FirebaseAuthService(apiService: apiService);
+  final auditLogger = ref.watch(auditLoggerProvider);
+  return FirebaseAuthService(
+    apiService: apiService,
+    auditLogger: auditLogger,
+  );
 });
 
 /// Auth State Stream Provider
@@ -231,6 +267,59 @@ final mapIconsProvider = FutureProvider<MapIconsBundle>((ref) async {
   return MapIcons.load();
 });
 
+class LegalConsentNotifier extends Notifier<LegalConsent> {
+  static const String _storageKey = 'legal_consent_v1';
+
+  @override
+  LegalConsent build() {
+    Future.microtask(() => _loadConsent());
+    return LegalConsent.initial();
+  }
+
+  Future<void> _loadConsent() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_storageKey);
+    if (raw == null) return;
+    try {
+      state = LegalConsent.fromEncodedJson(raw);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error loading legal consent: $e');
+      }
+    }
+  }
+
+  Future<void> saveConsent(LegalConsent consent) async {
+    state = consent;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_storageKey, consent.toEncodedJson());
+      await ref.read(auditLoggerProvider).log('compliance.legal_consent', {
+        'termsVersion': consent.termsVersion,
+        'privacyVersion': consent.privacyVersion,
+        'locationConsent': consent.locationConsent,
+        'analyticsConsent': consent.analyticsConsent,
+        'marketingConsent': consent.marketingConsent,
+        'ageConfirmed': consent.ageConfirmed,
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Error saving legal consent: $e');
+      }
+    }
+  }
+
+  Future<void> clearConsent() async {
+    state = LegalConsent.initial();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_storageKey);
+  }
+}
+
+final legalConsentProvider = NotifierProvider<LegalConsentNotifier, LegalConsent>(
+  LegalConsentNotifier.new,
+);
+
 /// Métodos para cambiar estados (usaremos Consumer widgets en lugar de notifiers)
 /// Estos proveedores servirán para lectura, y manejaremos los cambios directamente en los widgets
 
@@ -242,30 +331,21 @@ final userProfileDtoProvider = FutureProvider.autoDispose<UserProfileDto?>((ref)
 });
 
 /// Verifica si el usuario tiene un perfil completo
-final hasCompleteProfileProvider = Provider<bool>((ref) {
+final hasCompleteProfileProvider = Provider<AsyncValue<bool>>((ref) {
   final user = ref.watch(currentFirebaseUserProvider);
-  if (user == null) return false;
+  if (user == null) {
+    return const AsyncValue.data(false);
+  }
 
   final profileAsync = ref.watch(userProfileDtoProvider);
-  return profileAsync.when(
-    data: (dto) {
-      if (dto == null) return false;
-      final hasName = (dto.displayName ?? '').trim().isNotEmpty;
-      final hasBirth = dto.birthDate != null;
-      return hasName && hasBirth;
-    },
-    loading: () => false, // Devuelve false mientras carga para evitar falsos positivos
-    error: (_, __) => false,
-  );
+  return profileAsync.whenData((dto) {
+    if (dto == null) return false;
+    final hasName = (dto.displayName ?? '').trim().isNotEmpty;
+    final hasBirth = dto.birthDate != null;
+    return hasName && hasBirth;
+  });
 });
 
-
-final userTerritoryDtoProvider = FutureProvider.autoDispose<TerritoryDto?>((ref) async {
-  final user = ref.watch(currentFirebaseUserProvider);
-  if (user == null) return null;
-  final api = ref.watch(apiServiceProvider);
-  return api.fetchTerritoryDto(user.uid);
-});
 
 final userRunsDtoProvider = FutureProvider.autoDispose<List<RunDto>>((ref) async {
   final user = ref.watch(currentFirebaseUserProvider);
