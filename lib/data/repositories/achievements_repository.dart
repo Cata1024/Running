@@ -1,19 +1,19 @@
 import 'dart:convert';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/constants/achievements_catalog.dart';
 import '../../domain/repositories/i_achievements_repository.dart';
+import '../services/api_service.dart';
 
 class AchievementsRepository implements IAchievementsRepository {
   AchievementsRepository({
-    FirebaseFirestore? firestore,
+    required ApiService api,
     SharedPreferences? preferences,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+  })  : _api = api,
         _preferences = preferences;
 
-  final FirebaseFirestore _firestore;
+  final ApiService _api;
   SharedPreferences? _preferences;
 
   Future<SharedPreferences> _prefs() async {
@@ -42,9 +42,7 @@ class AchievementsRepository implements IAchievementsRepository {
       if (value is! Map<String, dynamic>) return;
       final unlockedAtRaw = value['unlockedAt'];
       DateTime? unlockedAt;
-      if (unlockedAtRaw is Timestamp) {
-        unlockedAt = unlockedAtRaw.toDate();
-      } else if (unlockedAtRaw is String && unlockedAtRaw.isNotEmpty) {
+      if (unlockedAtRaw is String && unlockedAtRaw.isNotEmpty) {
         unlockedAt = DateTime.tryParse(unlockedAtRaw);
       }
       final currentValue = value['currentValue'];
@@ -62,20 +60,13 @@ class AchievementsRepository implements IAchievementsRepository {
 
   @override
   Future<AchievementsSnapshot> fetchRemoteSnapshot(String userId) async {
-    final doc = await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('achievements')
-        .doc('progress')
-        .get();
+    final response = await _api.fetchAchievements(userId);
 
-    if (!doc.exists) {
+    if (response == null) {
       return AchievementsSnapshot.empty;
     }
 
-    final data = doc.data();
-    if (data == null) return AchievementsSnapshot.empty;
-    final achievements = data['achievements'];
+    final achievements = response['achievements'];
     if (achievements is! Map<String, dynamic>) {
       return AchievementsSnapshot.empty;
     }
@@ -91,17 +82,11 @@ class AchievementsRepository implements IAchievementsRepository {
   }) async {
     final payload = _progressToJson(snapshot.entries);
 
-    await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('achievements')
-        .doc('progress')
-        .set({
+    await _api.saveAchievements(userId, {
       'achievements': payload,
-      'lastUpdated': FieldValue.serverTimestamp(),
       'totalXp': totalXp,
       'unlockedCount': unlockedCount,
-    }, SetOptions(merge: true));
+    });
   }
 
   @override

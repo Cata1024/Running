@@ -72,6 +72,14 @@ class AeroTextField extends StatefulWidget {
   State<AeroTextField> createState() => _AeroTextFieldState();
 }
 
+Color _mutedFocusColor(Color base) {
+  final hsl = HSLColor.fromColor(base);
+  final desaturated = hsl
+      .withSaturation((hsl.saturation * 0.25).clamp(0.0, 1.0))
+      .withLightness((hsl.lightness + 0.18).clamp(0.0, 1.0));
+  return desaturated.toColor().withValues(alpha: 0.85);
+}
+
 class _AeroTextFieldState extends State<AeroTextField>
     with SingleTickerProviderStateMixin {
   late FocusNode _focusNode;
@@ -150,6 +158,7 @@ class _AeroTextFieldState extends State<AeroTextField>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final focusColor = _mutedFocusColor(scheme.primary);
     final hasError = widget.errorText != null || _validationError != null;
     final errorMessage = widget.errorText ?? _validationError;
 
@@ -157,11 +166,11 @@ class _AeroTextFieldState extends State<AeroTextField>
     final borderColor = hasError
         ? scheme.error
         : _isFocused
-            ? scheme.primary
-            : scheme.outline.withValues(alpha: 0.3);
+            ? focusColor
+            : scheme.outline.withValues(alpha: 0.28);
 
     final backgroundColor = widget.enabled
-        ? scheme.surface.withValues(alpha: _isFocused ? 0.1 : 0.05)
+        ? scheme.surface.withValues(alpha: _isFocused ? 0.08 : 0.04)
         : scheme.surface.withValues(alpha: 0.02);
 
     return Semantics(
@@ -181,7 +190,7 @@ class _AeroTextFieldState extends State<AeroTextField>
                 color: hasError
                     ? scheme.error
                     : _isFocused
-                        ? scheme.primary
+                        ? focusColor
                         : scheme.onSurfaceVariant,
                 fontWeight: _isFocused ? FontWeight.w600 : FontWeight.w500,
               ) ?? const TextStyle(),
@@ -205,14 +214,14 @@ class _AeroTextFieldState extends State<AeroTextField>
                     borderRadius: BorderRadius.circular(TerritoryTokens.radiusMedium),
                     border: Border.all(
                       color: borderColor,
-                      width: _isFocused ? 2 : 1,
+                      width: _isFocused ? 1.4 : 1,
                     ),
                     boxShadow: _isFocused
                         ? [
                             BoxShadow(
-                              color: scheme.primary.withValues(alpha: 0.1),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+                              color: focusColor.withValues(alpha: 0.25),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
                             ),
                           ]
                         : null,

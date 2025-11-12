@@ -48,6 +48,8 @@
   "noRunsYet": "No runs yet",
   "startFirstRun": "Start your first run!",
   
+  "adjustmentStep": "Adjustment step",
+  
   "settingsApp": "Application",
   "settingsTheme": "Theme",
   "settingsLanguage": "Language",
@@ -174,6 +176,7 @@
   
   "goal": "Goal",
   "goalWeekly": "Weekly goal",
+  "goalDescription": "Goal description",
   "goalProgress": "Progress",
   
   "about": "About",

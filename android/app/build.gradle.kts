@@ -122,8 +122,11 @@ kotlin {
 }
 
 dependencies {
-    implementation(platform("com.google.firebase:firebase-bom:34.4.0"))
+    implementation(platform("com.google.firebase:firebase-bom:34.5.0"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-appcheck-debug")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    implementation("com.google.android.play:integrity:1.3.0")
     // Core library desugaring (requerido por flutter_local_notifications)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

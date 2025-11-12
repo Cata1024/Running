@@ -19,6 +19,7 @@ class OnboardingData {
   String? goalDescription;
   String preferredUnits = 'metric';
   AuthMethod? authMethod;
+  bool completedOnboarding = false;
   
   // Para email/password
   String? email;
@@ -42,6 +43,7 @@ class OnboardingDataNotifier extends Notifier<OnboardingData> {
       ..weeklyDistanceGoal = state.weeklyDistanceGoal
       ..goalDescription = state.goalDescription
       ..preferredUnits = state.preferredUnits
+      ..completedOnboarding = state.completedOnboarding
       ..email = state.email
       ..password = state.password
       ..authMethod = state.authMethod;

@@ -67,8 +67,8 @@ abstract class AppLocalizations {
 
   final String localeName;
 
-  static AppLocalizations of(BuildContext context) {
-    return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
+  static AppLocalizations? of(BuildContext context) {
+    return Localizations.of<AppLocalizations>(context, AppLocalizations);
   }
 
   static const LocalizationsDelegate<AppLocalizations> delegate =
@@ -100,914 +100,926 @@ abstract class AppLocalizations {
 
   /// No description provided for @appTitle.
   ///
-  /// In es, this message translates to:
+  /// In en, this message translates to:
   /// **'Territory Run'**
   String get appTitle;
 
   /// No description provided for @welcome.
   ///
-  /// In es, this message translates to:
-  /// **'Bienvenido'**
+  /// In en, this message translates to:
+  /// **'Welcome'**
   String get welcome;
 
   /// No description provided for @getStarted.
   ///
-  /// In es, this message translates to:
-  /// **'Comenzar'**
+  /// In en, this message translates to:
+  /// **'Get Started'**
   String get getStarted;
 
   /// No description provided for @signIn.
   ///
-  /// In es, this message translates to:
-  /// **'Iniciar Sesión'**
+  /// In en, this message translates to:
+  /// **'Sign In'**
   String get signIn;
 
   /// No description provided for @signUp.
   ///
-  /// In es, this message translates to:
-  /// **'Registrarse'**
+  /// In en, this message translates to:
+  /// **'Sign Up'**
   String get signUp;
 
   /// No description provided for @signOut.
   ///
-  /// In es, this message translates to:
-  /// **'Cerrar Sesión'**
+  /// In en, this message translates to:
+  /// **'Sign Out'**
   String get signOut;
 
   /// No description provided for @email.
   ///
-  /// In es, this message translates to:
-  /// **'Correo electrónico'**
+  /// In en, this message translates to:
+  /// **'Email'**
   String get email;
 
   /// No description provided for @password.
   ///
-  /// In es, this message translates to:
-  /// **'Contraseña'**
+  /// In en, this message translates to:
+  /// **'Password'**
   String get password;
 
   /// No description provided for @confirmPassword.
   ///
-  /// In es, this message translates to:
-  /// **'Confirmar contraseña'**
+  /// In en, this message translates to:
+  /// **'Confirm password'**
   String get confirmPassword;
 
   /// No description provided for @forgotPassword.
   ///
-  /// In es, this message translates to:
-  /// **'¿Olvidaste tu contraseña?'**
+  /// In en, this message translates to:
+  /// **'Forgot password?'**
   String get forgotPassword;
 
   /// No description provided for @dontHaveAccount.
   ///
-  /// In es, this message translates to:
-  /// **'¿No tienes cuenta?'**
+  /// In en, this message translates to:
+  /// **'Don\'t have an account?'**
   String get dontHaveAccount;
 
   /// No description provided for @alreadyHaveAccount.
   ///
-  /// In es, this message translates to:
-  /// **'¿Ya tienes cuenta?'**
+  /// In en, this message translates to:
+  /// **'Already have an account?'**
   String get alreadyHaveAccount;
 
   /// No description provided for @home.
   ///
-  /// In es, this message translates to:
-  /// **'Inicio'**
+  /// In en, this message translates to:
+  /// **'Home'**
   String get home;
 
   /// No description provided for @run.
   ///
-  /// In es, this message translates to:
-  /// **'Correr'**
+  /// In en, this message translates to:
+  /// **'Run'**
   String get run;
 
   /// No description provided for @history.
   ///
-  /// In es, this message translates to:
-  /// **'Historial'**
+  /// In en, this message translates to:
+  /// **'History'**
   String get history;
 
   /// No description provided for @profile.
   ///
-  /// In es, this message translates to:
-  /// **'Perfil'**
+  /// In en, this message translates to:
+  /// **'Profile'**
   String get profile;
 
   /// No description provided for @settings.
   ///
-  /// In es, this message translates to:
-  /// **'Configuración'**
+  /// In en, this message translates to:
+  /// **'Settings'**
   String get settings;
 
   /// No description provided for @startRun.
   ///
-  /// In es, this message translates to:
-  /// **'Iniciar Carrera'**
+  /// In en, this message translates to:
+  /// **'Start Run'**
   String get startRun;
 
   /// No description provided for @pauseRun.
   ///
-  /// In es, this message translates to:
-  /// **'Pausar'**
+  /// In en, this message translates to:
+  /// **'Pause'**
   String get pauseRun;
 
   /// No description provided for @resumeRun.
   ///
-  /// In es, this message translates to:
-  /// **'Reanudar'**
+  /// In en, this message translates to:
+  /// **'Resume'**
   String get resumeRun;
 
   /// No description provided for @stopRun.
   ///
-  /// In es, this message translates to:
-  /// **'Detener'**
+  /// In en, this message translates to:
+  /// **'Stop'**
   String get stopRun;
 
   /// No description provided for @saveRun.
   ///
-  /// In es, this message translates to:
-  /// **'Guardar Carrera'**
+  /// In en, this message translates to:
+  /// **'Save Run'**
   String get saveRun;
 
   /// No description provided for @discardRun.
   ///
-  /// In es, this message translates to:
-  /// **'Descartar'**
+  /// In en, this message translates to:
+  /// **'Discard'**
   String get discardRun;
 
   /// No description provided for @distance.
   ///
-  /// In es, this message translates to:
-  /// **'Distancia'**
+  /// In en, this message translates to:
+  /// **'Distance'**
   String get distance;
 
   /// No description provided for @duration.
   ///
-  /// In es, this message translates to:
-  /// **'Duración'**
+  /// In en, this message translates to:
+  /// **'Duration'**
   String get duration;
 
   /// No description provided for @pace.
   ///
-  /// In es, this message translates to:
-  /// **'Ritmo'**
+  /// In en, this message translates to:
+  /// **'Pace'**
   String get pace;
 
   /// No description provided for @speed.
   ///
-  /// In es, this message translates to:
-  /// **'Velocidad'**
+  /// In en, this message translates to:
+  /// **'Speed'**
   String get speed;
 
   /// No description provided for @calories.
   ///
-  /// In es, this message translates to:
-  /// **'Calorías'**
+  /// In en, this message translates to:
+  /// **'Calories'**
   String get calories;
 
   /// No description provided for @elevation.
   ///
-  /// In es, this message translates to:
-  /// **'Elevación'**
+  /// In en, this message translates to:
+  /// **'Elevation'**
   String get elevation;
 
   /// No description provided for @km.
   ///
-  /// In es, this message translates to:
+  /// In en, this message translates to:
   /// **'km'**
   String get km;
 
   /// No description provided for @mi.
   ///
-  /// In es, this message translates to:
+  /// In en, this message translates to:
   /// **'mi'**
   String get mi;
 
   /// No description provided for @meters.
   ///
-  /// In es, this message translates to:
-  /// **'metros'**
+  /// In en, this message translates to:
+  /// **'meters'**
   String get meters;
 
   /// No description provided for @feet.
   ///
-  /// In es, this message translates to:
-  /// **'pies'**
+  /// In en, this message translates to:
+  /// **'feet'**
   String get feet;
 
   /// No description provided for @today.
   ///
-  /// In es, this message translates to:
-  /// **'Hoy'**
+  /// In en, this message translates to:
+  /// **'Today'**
   String get today;
 
   /// No description provided for @thisWeek.
   ///
-  /// In es, this message translates to:
-  /// **'Esta semana'**
+  /// In en, this message translates to:
+  /// **'This week'**
   String get thisWeek;
 
   /// No description provided for @thisMonth.
   ///
-  /// In es, this message translates to:
-  /// **'Este mes'**
+  /// In en, this message translates to:
+  /// **'This month'**
   String get thisMonth;
 
   /// No description provided for @allTime.
   ///
-  /// In es, this message translates to:
-  /// **'Todo el tiempo'**
+  /// In en, this message translates to:
+  /// **'All time'**
   String get allTime;
 
   /// No description provided for @noRunsYet.
   ///
-  /// In es, this message translates to:
-  /// **'Aún no tienes carreras'**
+  /// In en, this message translates to:
+  /// **'No runs yet'**
   String get noRunsYet;
 
   /// No description provided for @startFirstRun.
   ///
-  /// In es, this message translates to:
-  /// **'¡Inicia tu primera carrera!'**
+  /// In en, this message translates to:
+  /// **'Start your first run!'**
   String get startFirstRun;
+
+  /// No description provided for @adjustmentStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjustment step'**
+  String get adjustmentStep;
 
   /// No description provided for @settingsApp.
   ///
-  /// In es, this message translates to:
-  /// **'Aplicación'**
+  /// In en, this message translates to:
+  /// **'Application'**
   String get settingsApp;
 
   /// No description provided for @settingsTheme.
   ///
-  /// In es, this message translates to:
-  /// **'Tema'**
+  /// In en, this message translates to:
+  /// **'Theme'**
   String get settingsTheme;
 
   /// No description provided for @settingsLanguage.
   ///
-  /// In es, this message translates to:
-  /// **'Idioma'**
+  /// In en, this message translates to:
+  /// **'Language'**
   String get settingsLanguage;
 
   /// No description provided for @settingsNotifications.
   ///
-  /// In es, this message translates to:
-  /// **'Notificaciones'**
+  /// In en, this message translates to:
+  /// **'Notifications'**
   String get settingsNotifications;
 
   /// No description provided for @settingsUnits.
   ///
-  /// In es, this message translates to:
-  /// **'Unidades'**
+  /// In en, this message translates to:
+  /// **'Units'**
   String get settingsUnits;
 
   /// No description provided for @settingsGps.
   ///
-  /// In es, this message translates to:
+  /// In en, this message translates to:
   /// **'GPS'**
   String get settingsGps;
 
   /// No description provided for @settingsPrivacy.
   ///
-  /// In es, this message translates to:
-  /// **'Privacidad y Seguridad'**
+  /// In en, this message translates to:
+  /// **'Privacy & Security'**
   String get settingsPrivacy;
 
   /// No description provided for @themeSystem.
   ///
-  /// In es, this message translates to:
-  /// **'Sistema'**
+  /// In en, this message translates to:
+  /// **'System'**
   String get themeSystem;
 
   /// No description provided for @themeLight.
   ///
-  /// In es, this message translates to:
-  /// **'Claro'**
+  /// In en, this message translates to:
+  /// **'Light'**
   String get themeLight;
 
   /// No description provided for @themeDark.
   ///
-  /// In es, this message translates to:
-  /// **'Oscuro'**
+  /// In en, this message translates to:
+  /// **'Dark'**
   String get themeDark;
 
   /// No description provided for @languageSpanish.
   ///
-  /// In es, this message translates to:
+  /// In en, this message translates to:
   /// **'Español'**
   String get languageSpanish;
 
   /// No description provided for @languageEnglish.
   ///
-  /// In es, this message translates to:
+  /// In en, this message translates to:
   /// **'English'**
   String get languageEnglish;
 
   /// No description provided for @unitsMetric.
   ///
-  /// In es, this message translates to:
-  /// **'Sistema Métrico'**
+  /// In en, this message translates to:
+  /// **'Metric System'**
   String get unitsMetric;
 
   /// No description provided for @unitsImperial.
   ///
-  /// In es, this message translates to:
-  /// **'Sistema Imperial'**
+  /// In en, this message translates to:
+  /// **'Imperial System'**
   String get unitsImperial;
 
   /// No description provided for @gpsAccuracy.
   ///
-  /// In es, this message translates to:
-  /// **'Precisión'**
+  /// In en, this message translates to:
+  /// **'Accuracy'**
   String get gpsAccuracy;
 
   /// No description provided for @gpsAccuracyLow.
   ///
-  /// In es, this message translates to:
-  /// **'Baja'**
+  /// In en, this message translates to:
+  /// **'Low'**
   String get gpsAccuracyLow;
 
   /// No description provided for @gpsAccuracyBalanced.
   ///
-  /// In es, this message translates to:
-  /// **'Equilibrada'**
+  /// In en, this message translates to:
+  /// **'Balanced'**
   String get gpsAccuracyBalanced;
 
   /// No description provided for @gpsAccuracyHigh.
   ///
-  /// In es, this message translates to:
-  /// **'Alta'**
+  /// In en, this message translates to:
+  /// **'High'**
   String get gpsAccuracyHigh;
 
   /// No description provided for @autoPause.
   ///
-  /// In es, this message translates to:
-  /// **'Auto Pausa'**
+  /// In en, this message translates to:
+  /// **'Auto Pause'**
   String get autoPause;
 
   /// No description provided for @autoPauseDescription.
   ///
-  /// In es, this message translates to:
-  /// **'Pausar automáticamente cuando te detienes'**
+  /// In en, this message translates to:
+  /// **'Automatically pause when you stop'**
   String get autoPauseDescription;
 
   /// No description provided for @notificationsEnabled.
   ///
-  /// In es, this message translates to:
-  /// **'Habilitar notificaciones'**
+  /// In en, this message translates to:
+  /// **'Enable notifications'**
   String get notificationsEnabled;
 
   /// No description provided for @notificationsRunReminders.
   ///
-  /// In es, this message translates to:
-  /// **'Recordatorios de carrera'**
+  /// In en, this message translates to:
+  /// **'Run reminders'**
   String get notificationsRunReminders;
 
   /// No description provided for @notificationsAchievements.
   ///
-  /// In es, this message translates to:
-  /// **'Logros y niveles'**
+  /// In en, this message translates to:
+  /// **'Achievements and levels'**
   String get notificationsAchievements;
 
   /// No description provided for @notificationsWeeklyReport.
   ///
-  /// In es, this message translates to:
-  /// **'Reporte semanal'**
+  /// In en, this message translates to:
+  /// **'Weekly report'**
   String get notificationsWeeklyReport;
 
   /// No description provided for @privacyPublicProfile.
   ///
-  /// In es, this message translates to:
-  /// **'Perfil Público'**
+  /// In en, this message translates to:
+  /// **'Public Profile'**
   String get privacyPublicProfile;
 
   /// No description provided for @privacyShareLocation.
   ///
-  /// In es, this message translates to:
-  /// **'Compartir Ubicación en Vivo'**
+  /// In en, this message translates to:
+  /// **'Share Live Location'**
   String get privacyShareLocation;
 
   /// No description provided for @privacyAllowAnalytics.
   ///
-  /// In es, this message translates to:
-  /// **'Permitir Analytics'**
+  /// In en, this message translates to:
+  /// **'Allow Analytics'**
   String get privacyAllowAnalytics;
 
   /// No description provided for @exportData.
   ///
-  /// In es, this message translates to:
-  /// **'Exportar mis datos'**
+  /// In en, this message translates to:
+  /// **'Export my data'**
   String get exportData;
 
   /// No description provided for @deleteAccount.
   ///
-  /// In es, this message translates to:
-  /// **'Solicitar eliminación de datos'**
+  /// In en, this message translates to:
+  /// **'Request data deletion'**
   String get deleteAccount;
 
   /// No description provided for @cancel.
   ///
-  /// In es, this message translates to:
-  /// **'Cancelar'**
+  /// In en, this message translates to:
+  /// **'Cancel'**
   String get cancel;
 
   /// No description provided for @confirm.
   ///
-  /// In es, this message translates to:
-  /// **'Confirmar'**
+  /// In en, this message translates to:
+  /// **'Confirm'**
   String get confirm;
 
   /// No description provided for @save.
   ///
-  /// In es, this message translates to:
-  /// **'Guardar'**
+  /// In en, this message translates to:
+  /// **'Save'**
   String get save;
 
   /// No description provided for @delete.
   ///
-  /// In es, this message translates to:
-  /// **'Eliminar'**
+  /// In en, this message translates to:
+  /// **'Delete'**
   String get delete;
 
   /// No description provided for @edit.
   ///
-  /// In es, this message translates to:
-  /// **'Editar'**
+  /// In en, this message translates to:
+  /// **'Edit'**
   String get edit;
 
   /// No description provided for @done.
   ///
-  /// In es, this message translates to:
-  /// **'Listo'**
+  /// In en, this message translates to:
+  /// **'Done'**
   String get done;
 
   /// No description provided for @error.
   ///
-  /// In es, this message translates to:
+  /// In en, this message translates to:
   /// **'Error'**
   String get error;
 
   /// No description provided for @success.
   ///
-  /// In es, this message translates to:
-  /// **'Éxito'**
+  /// In en, this message translates to:
+  /// **'Success'**
   String get success;
 
   /// No description provided for @loading.
   ///
-  /// In es, this message translates to:
-  /// **'Cargando...'**
+  /// In en, this message translates to:
+  /// **'Loading...'**
   String get loading;
 
   /// No description provided for @runSavedSuccessfully.
   ///
-  /// In es, this message translates to:
-  /// **'Carrera guardada exitosamente'**
+  /// In en, this message translates to:
+  /// **'Run saved successfully'**
   String get runSavedSuccessfully;
 
   /// No description provided for @runSaveFailed.
   ///
-  /// In es, this message translates to:
-  /// **'No se pudo guardar la carrera'**
+  /// In en, this message translates to:
+  /// **'Failed to save run'**
   String get runSaveFailed;
 
   /// No description provided for @locationPermissionRequired.
   ///
-  /// In es, this message translates to:
-  /// **'Se requiere permiso de ubicación'**
+  /// In en, this message translates to:
+  /// **'Location permission required'**
   String get locationPermissionRequired;
 
   /// No description provided for @locationPermissionDenied.
   ///
-  /// In es, this message translates to:
-  /// **'Permiso de ubicación denegado'**
+  /// In en, this message translates to:
+  /// **'Location permission denied'**
   String get locationPermissionDenied;
 
   /// No description provided for @locationServiceDisabled.
   ///
-  /// In es, this message translates to:
-  /// **'Servicio de ubicación desactivado'**
+  /// In en, this message translates to:
+  /// **'Location service disabled'**
   String get locationServiceDisabled;
 
   /// No description provided for @runningActive.
   ///
-  /// In es, this message translates to:
-  /// **'Carrera Activa'**
+  /// In en, this message translates to:
+  /// **'Run Active'**
   String get runningActive;
 
   /// No description provided for @runningPaused.
   ///
-  /// In es, this message translates to:
-  /// **'Carrera en Pausa'**
+  /// In en, this message translates to:
+  /// **'Run Paused'**
   String get runningPaused;
 
   /// No description provided for @terrain.
   ///
-  /// In es, this message translates to:
-  /// **'Terreno'**
+  /// In en, this message translates to:
+  /// **'Terrain'**
   String get terrain;
 
   /// No description provided for @mood.
   ///
-  /// In es, this message translates to:
-  /// **'Estado de ánimo'**
+  /// In en, this message translates to:
+  /// **'Mood'**
   String get mood;
 
   /// No description provided for @weather.
   ///
-  /// In es, this message translates to:
-  /// **'Clima'**
+  /// In en, this message translates to:
+  /// **'Weather'**
   String get weather;
 
   /// No description provided for @terrainUrban.
   ///
-  /// In es, this message translates to:
-  /// **'Urbano'**
+  /// In en, this message translates to:
+  /// **'Urban'**
   String get terrainUrban;
 
   /// No description provided for @terrainTrail.
   ///
-  /// In es, this message translates to:
+  /// In en, this message translates to:
   /// **'Trail'**
   String get terrainTrail;
 
   /// No description provided for @terrainMixed.
   ///
-  /// In es, this message translates to:
-  /// **'Mixto'**
+  /// In en, this message translates to:
+  /// **'Mixed'**
   String get terrainMixed;
 
   /// No description provided for @terrainTrack.
   ///
-  /// In es, this message translates to:
-  /// **'Pista'**
+  /// In en, this message translates to:
+  /// **'Track'**
   String get terrainTrack;
 
   /// No description provided for @moodMotivated.
   ///
-  /// In es, this message translates to:
-  /// **'Motivado'**
+  /// In en, this message translates to:
+  /// **'Motivated'**
   String get moodMotivated;
 
   /// No description provided for @moodRelaxed.
   ///
-  /// In es, this message translates to:
-  /// **'Relajado'**
+  /// In en, this message translates to:
+  /// **'Relaxed'**
   String get moodRelaxed;
 
   /// No description provided for @moodFocused.
   ///
-  /// In es, this message translates to:
-  /// **'Enfocado'**
+  /// In en, this message translates to:
+  /// **'Focused'**
   String get moodFocused;
 
   /// No description provided for @moodCompetitive.
   ///
-  /// In es, this message translates to:
-  /// **'Competitivo'**
+  /// In en, this message translates to:
+  /// **'Competitive'**
   String get moodCompetitive;
 
   /// No description provided for @moodTired.
   ///
-  /// In es, this message translates to:
-  /// **'Cansado'**
+  /// In en, this message translates to:
+  /// **'Tired'**
   String get moodTired;
 
   /// No description provided for @level.
   ///
-  /// In es, this message translates to:
-  /// **'Nivel'**
+  /// In en, this message translates to:
+  /// **'Level'**
   String get level;
 
   /// No description provided for @experience.
   ///
-  /// In es, this message translates to:
-  /// **'Experiencia'**
+  /// In en, this message translates to:
+  /// **'Experience'**
   String get experience;
 
   /// No description provided for @achievements.
   ///
-  /// In es, this message translates to:
-  /// **'Logros'**
+  /// In en, this message translates to:
+  /// **'Achievements'**
   String get achievements;
 
   /// No description provided for @statistics.
   ///
-  /// In es, this message translates to:
-  /// **'Estadísticas'**
+  /// In en, this message translates to:
+  /// **'Statistics'**
   String get statistics;
 
   /// No description provided for @totalRuns.
   ///
-  /// In es, this message translates to:
-  /// **'Carreras totales'**
+  /// In en, this message translates to:
+  /// **'Total runs'**
   String get totalRuns;
 
   /// No description provided for @editProfile.
   ///
-  /// In es, this message translates to:
-  /// **'Editar Perfil'**
+  /// In en, this message translates to:
+  /// **'Edit Profile'**
   String get editProfile;
 
   /// No description provided for @basicInformation.
   ///
-  /// In es, this message translates to:
-  /// **'Información Básica'**
+  /// In en, this message translates to:
+  /// **'Basic Information'**
   String get basicInformation;
 
   /// No description provided for @fullName.
   ///
-  /// In es, this message translates to:
-  /// **'Nombre completo'**
+  /// In en, this message translates to:
+  /// **'Full name'**
   String get fullName;
 
   /// No description provided for @birthDate.
   ///
-  /// In es, this message translates to:
-  /// **'Fecha de nacimiento'**
+  /// In en, this message translates to:
+  /// **'Birth date'**
   String get birthDate;
 
   /// No description provided for @gender.
   ///
-  /// In es, this message translates to:
-  /// **'Género'**
+  /// In en, this message translates to:
+  /// **'Gender'**
   String get gender;
 
   /// No description provided for @genderMale.
   ///
-  /// In es, this message translates to:
-  /// **'Masculino'**
+  /// In en, this message translates to:
+  /// **'Male'**
   String get genderMale;
 
   /// No description provided for @genderFemale.
   ///
-  /// In es, this message translates to:
-  /// **'Femenino'**
+  /// In en, this message translates to:
+  /// **'Female'**
   String get genderFemale;
 
   /// No description provided for @genderOther.
   ///
-  /// In es, this message translates to:
-  /// **'Otro'**
+  /// In en, this message translates to:
+  /// **'Other'**
   String get genderOther;
 
   /// No description provided for @physicalProfile.
   ///
-  /// In es, this message translates to:
-  /// **'Perfil Físico'**
+  /// In en, this message translates to:
+  /// **'Physical Profile'**
   String get physicalProfile;
 
   /// No description provided for @weight.
   ///
-  /// In es, this message translates to:
-  /// **'Peso'**
+  /// In en, this message translates to:
+  /// **'Weight'**
   String get weight;
 
   /// No description provided for @height.
   ///
-  /// In es, this message translates to:
-  /// **'Altura'**
+  /// In en, this message translates to:
+  /// **'Height'**
   String get height;
 
   /// No description provided for @runningGoal.
   ///
-  /// In es, this message translates to:
-  /// **'Objetivo de Carrera'**
+  /// In en, this message translates to:
+  /// **'Running Goal'**
   String get runningGoal;
 
   /// No description provided for @goalFitness.
   ///
-  /// In es, this message translates to:
-  /// **'Mantenerme en forma'**
+  /// In en, this message translates to:
+  /// **'Stay fit'**
   String get goalFitness;
 
   /// No description provided for @goalWeight.
   ///
-  /// In es, this message translates to:
-  /// **'Perder peso'**
+  /// In en, this message translates to:
+  /// **'Lose weight'**
   String get goalWeight;
 
   /// No description provided for @goalSpeed.
   ///
-  /// In es, this message translates to:
-  /// **'Mejorar velocidad'**
+  /// In en, this message translates to:
+  /// **'Improve speed'**
   String get goalSpeed;
 
   /// No description provided for @goalDistance.
   ///
-  /// In es, this message translates to:
-  /// **'Aumentar distancia'**
+  /// In en, this message translates to:
+  /// **'Increase distance'**
   String get goalDistance;
 
   /// No description provided for @goalCompete.
   ///
-  /// In es, this message translates to:
-  /// **'Competir'**
+  /// In en, this message translates to:
+  /// **'Compete'**
   String get goalCompete;
 
   /// No description provided for @weeklyGoal.
   ///
-  /// In es, this message translates to:
-  /// **'Meta Semanal'**
+  /// In en, this message translates to:
+  /// **'Weekly Goal'**
   String get weeklyGoal;
 
   /// No description provided for @unsavedChanges.
   ///
-  /// In es, this message translates to:
-  /// **'Cambios sin guardar'**
+  /// In en, this message translates to:
+  /// **'Unsaved changes'**
   String get unsavedChanges;
 
   /// No description provided for @unsavedChangesMessage.
   ///
-  /// In es, this message translates to:
-  /// **'Tienes cambios sin guardar. ¿Deseas descartarlos?'**
+  /// In en, this message translates to:
+  /// **'You have unsaved changes. Do you want to discard them?'**
   String get unsavedChangesMessage;
 
   /// No description provided for @discard.
   ///
-  /// In es, this message translates to:
-  /// **'Descartar'**
+  /// In en, this message translates to:
+  /// **'Discard'**
   String get discard;
 
   /// No description provided for @keepEditing.
   ///
-  /// In es, this message translates to:
-  /// **'Seguir editando'**
+  /// In en, this message translates to:
+  /// **'Keep editing'**
   String get keepEditing;
 
   /// No description provided for @profileUpdated.
   ///
-  /// In es, this message translates to:
-  /// **'Perfil actualizado'**
+  /// In en, this message translates to:
+  /// **'Profile updated'**
   String get profileUpdated;
 
   /// No description provided for @profileUpdateFailed.
   ///
-  /// In es, this message translates to:
-  /// **'No se pudo actualizar el perfil'**
+  /// In en, this message translates to:
+  /// **'Failed to update profile'**
   String get profileUpdateFailed;
 
   /// No description provided for @yourName.
   ///
-  /// In es, this message translates to:
-  /// **'Tu nombre'**
+  /// In en, this message translates to:
+  /// **'Your name'**
   String get yourName;
 
   /// No description provided for @nameIsRequired.
   ///
-  /// In es, this message translates to:
-  /// **'El nombre es requerido'**
+  /// In en, this message translates to:
+  /// **'Name is required'**
   String get nameIsRequired;
 
   /// No description provided for @selectDate.
   ///
-  /// In es, this message translates to:
-  /// **'Seleccionar fecha'**
+  /// In en, this message translates to:
+  /// **'Select date'**
   String get selectDate;
 
   /// No description provided for @male.
   ///
-  /// In es, this message translates to:
-  /// **'Masculino'**
+  /// In en, this message translates to:
+  /// **'Male'**
   String get male;
 
   /// No description provided for @female.
   ///
-  /// In es, this message translates to:
-  /// **'Femenino'**
+  /// In en, this message translates to:
+  /// **'Female'**
   String get female;
 
   /// No description provided for @other.
   ///
-  /// In es, this message translates to:
-  /// **'Otro'**
+  /// In en, this message translates to:
+  /// **'Other'**
   String get other;
 
   /// No description provided for @preferNotSay.
   ///
-  /// In es, this message translates to:
-  /// **'Prefiero no decir'**
+  /// In en, this message translates to:
+  /// **'Prefer not to say'**
   String get preferNotSay;
 
   /// No description provided for @fitnessGeneral.
   ///
-  /// In es, this message translates to:
-  /// **'Condición física'**
+  /// In en, this message translates to:
+  /// **'General fitness'**
   String get fitnessGeneral;
 
   /// No description provided for @stayActive.
   ///
-  /// In es, this message translates to:
-  /// **'Mantenerme activo'**
+  /// In en, this message translates to:
+  /// **'Stay active'**
   String get stayActive;
 
   /// No description provided for @weightLoss.
   ///
-  /// In es, this message translates to:
-  /// **'Pérdida de peso'**
+  /// In en, this message translates to:
+  /// **'Weight loss'**
   String get weightLoss;
 
   /// No description provided for @loseWeight.
   ///
-  /// In es, this message translates to:
-  /// **'Perder peso'**
+  /// In en, this message translates to:
+  /// **'Lose weight'**
   String get loseWeight;
 
   /// No description provided for @competition.
   ///
-  /// In es, this message translates to:
-  /// **'Competencia'**
+  /// In en, this message translates to:
+  /// **'Competition'**
   String get competition;
 
   /// No description provided for @prepareForRaces.
   ///
-  /// In es, this message translates to:
-  /// **'Prepararme para carreras'**
+  /// In en, this message translates to:
+  /// **'Prepare for races'**
   String get prepareForRaces;
 
   /// No description provided for @fun.
   ///
-  /// In es, this message translates to:
-  /// **'Diversión'**
+  /// In en, this message translates to:
+  /// **'Fun'**
   String get fun;
 
   /// No description provided for @enjoyRunning.
   ///
-  /// In es, this message translates to:
-  /// **'Disfrutar corriendo'**
+  /// In en, this message translates to:
+  /// **'Enjoy running'**
   String get enjoyRunning;
 
   /// No description provided for @totalDistance.
   ///
-  /// In es, this message translates to:
-  /// **'Distancia total'**
+  /// In en, this message translates to:
+  /// **'Total distance'**
   String get totalDistance;
 
   /// No description provided for @totalDuration.
   ///
-  /// In es, this message translates to:
-  /// **'Duración total'**
+  /// In en, this message translates to:
+  /// **'Total duration'**
   String get totalDuration;
 
   /// No description provided for @averagePace.
   ///
-  /// In es, this message translates to:
-  /// **'Ritmo promedio'**
+  /// In en, this message translates to:
+  /// **'Average pace'**
   String get averagePace;
 
   /// No description provided for @goal.
   ///
-  /// In es, this message translates to:
-  /// **'Meta'**
+  /// In en, this message translates to:
+  /// **'Goal'**
   String get goal;
 
   /// No description provided for @goalWeekly.
   ///
-  /// In es, this message translates to:
-  /// **'Meta semanal'**
+  /// In en, this message translates to:
+  /// **'Weekly goal'**
   String get goalWeekly;
+
+  /// No description provided for @goalDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Goal description'**
+  String get goalDescription;
 
   /// No description provided for @goalProgress.
   ///
-  /// In es, this message translates to:
-  /// **'Progreso'**
+  /// In en, this message translates to:
+  /// **'Progress'**
   String get goalProgress;
 
   /// No description provided for @about.
   ///
-  /// In es, this message translates to:
-  /// **'Acerca de'**
+  /// In en, this message translates to:
+  /// **'About'**
   String get about;
 
   /// No description provided for @version.
   ///
-  /// In es, this message translates to:
-  /// **'Versión'**
+  /// In en, this message translates to:
+  /// **'Version'**
   String get version;
 
   /// No description provided for @helpSupport.
   ///
-  /// In es, this message translates to:
-  /// **'Ayuda y Soporte'**
+  /// In en, this message translates to:
+  /// **'Help & Support'**
   String get helpSupport;
 
   /// No description provided for @rateApp.
   ///
-  /// In es, this message translates to:
-  /// **'Calificar App'**
+  /// In en, this message translates to:
+  /// **'Rate App'**
   String get rateApp;
 
   /// No description provided for @privacyPolicy.
   ///
-  /// In es, this message translates to:
-  /// **'Política de Privacidad'**
+  /// In en, this message translates to:
+  /// **'Privacy Policy'**
   String get privacyPolicy;
 
   /// No description provided for @termsOfService.
   ///
-  /// In es, this message translates to:
-  /// **'Términos de Servicio'**
+  /// In en, this message translates to:
+  /// **'Terms of Service'**
   String get termsOfService;
 }
 

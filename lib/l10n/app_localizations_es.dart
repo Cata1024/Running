@@ -126,6 +126,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get startFirstRun => '¡Inicia tu primera carrera!';
 
   @override
+  String get adjustmentStep => 'Incremento';
+
+  @override
   String get settingsApp => 'Aplicación';
 
   @override
@@ -440,10 +443,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get averagePace => 'Ritmo promedio';
 
   @override
-  String get goal => 'Meta';
+  String get goal => 'Objetivo';
 
   @override
   String get goalWeekly => 'Meta semanal';
+
+  @override
+  String get goalDescription => 'Descripción del objetivo';
 
   @override
   String get goalProgress => 'Progreso';

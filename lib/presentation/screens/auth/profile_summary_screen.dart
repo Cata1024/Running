@@ -78,6 +78,7 @@ class _ProfileSummaryScreenState extends ConsumerState<ProfileSummaryScreen> {
       goalDescription: onboardingData.goalDescription,
       preferredUnits: onboardingData.preferredUnits,
       authMethod: authMethod,
+      completedOnboarding: onboardingData.completedOnboarding,
     );
     
     // Validar con mensajes específicos

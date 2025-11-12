@@ -20,6 +20,7 @@ class UserProfileDto {
   final String? goalType;
   final double? weeklyDistanceGoal;
   final DateTime? updatedAt;
+  final bool? completedOnboarding;
 
   const UserProfileDto({
     required this.id,
@@ -43,6 +44,7 @@ class UserProfileDto {
     this.goalType,
     this.weeklyDistanceGoal,
     this.updatedAt,
+    this.completedOnboarding,
   });
 
   factory UserProfileDto.fromMap(String id, Map<String, dynamic> json) {
@@ -76,6 +78,7 @@ class UserProfileDto {
       goalType: json['goalType'] as String?,
       weeklyDistanceGoal: (json['weeklyDistanceGoal'] as num?)?.toDouble(),
       updatedAt: parseDate(json['updatedAt']),
+      completedOnboarding: json['completedOnboarding'] as bool?,
     );
   }
 
@@ -102,6 +105,7 @@ class UserProfileDto {
       if (goalType != null) 'goalType': goalType,
       if (weeklyDistanceGoal != null) 'weeklyDistanceGoal': weeklyDistanceGoal,
       if (updatedAt != null) 'updatedAt': d(updatedAt)!.toIso8601String(),
+      if (completedOnboarding != null) 'completedOnboarding': completedOnboarding,
     }..removeWhere((k, v) => v == null);
   }
 }

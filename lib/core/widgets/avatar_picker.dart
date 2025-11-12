@@ -1,7 +1,8 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+
 import '../design_system/territory_tokens.dart';
 
 /// Widget para seleccionar y mostrar avatar con soporte para Firebase Upload
@@ -40,39 +41,67 @@ class _AvatarPickerState extends State<AvatarPicker> {
   File? _selectedImage;
   bool _isUploading = false;
   final ImagePicker _picker = ImagePicker();
+  
+  // Mostrar mensaje de error
+  void _showError(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
+        imageQuality: 85,
         maxWidth: 1024,
         maxHeight: 1024,
-        imageQuality: 85,
       );
 
-      if (image == null) return;
-
-      final file = File(image.path);
-      setState(() {
-        _selectedImage = file;
-      });
-
-      if (widget.onImageSelected != null) {
+      if (image != null) {
         setState(() => _isUploading = true);
-        try {
-          await widget.onImageSelected!(file);
-        } finally {
-          if (mounted) {
-            setState(() => _isUploading = false);
+        final File imageFile = File(image.path);
+        
+        if (widget.onImageSelected != null) {
+          try {
+            await widget.onImageSelected!(imageFile);
+            if (mounted) {
+              setState(() {
+                _selectedImage = imageFile;
+                _isUploading = false;
+              });
+            }
+          } on FormatException catch (e) {
+            _showError(e.message);
+            if (mounted) {
+              setState(() => _isUploading = false);
+            }
+          } on StateError catch (e) {
+            _showError(e.message);
+            if (mounted) {
+              setState(() => _isUploading = false);
+            }
+          } catch (e) {
+            _showError('Error inesperado: $e');
+            if (mounted) {
+              setState(() => _isUploading = false);
+            }
           }
+        } else {
+          setState(() {
+            _selectedImage = imageFile;
+            _isUploading = false;
+          });
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al seleccionar imagen: $e')),
-        );
-      }
+      setState(() => _isUploading = false);
+      _showError('Error al seleccionar la imagen: $e');
     }
   }
 
@@ -84,7 +113,7 @@ class _AvatarPickerState extends State<AvatarPicker> {
           top: Radius.circular(TerritoryTokens.radiusLarge),
         ),
       ),
-      builder: (context) {
+      builder: (BuildContext context) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(TerritoryTokens.space16),
@@ -96,7 +125,7 @@ class _AvatarPickerState extends State<AvatarPicker> {
                   height: 4,
                   margin: const EdgeInsets.only(bottom: TerritoryTokens.space16),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant.withAlpha(40),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -168,12 +197,12 @@ class _AvatarPickerState extends State<AvatarPicker> {
               shape: BoxShape.circle,
               color: theme.colorScheme.surfaceContainerHighest,
               border: Border.all(
-                color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                color: theme.colorScheme.outline.withAlpha(51), // 0.2 * 255 ≈ 51
                 width: 3,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
+                  color: Colors.black.withAlpha(26), // 0.1 * 255 ≈ 26
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -226,7 +255,7 @@ class _AvatarPickerState extends State<AvatarPicker> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
+                      color: Colors.black.withAlpha(51), // 0.2 * 255 ≈ 51
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -282,69 +311,3 @@ class _PlaceholderAvatar extends StatelessWidget {
   }
 }
 
-/// Helper para upload de avatar a Firebase Storage
-/// 
-/// Uso:
-/// ```dart
-/// final url = await AvatarUploader.uploadToFirebase(
-///   file: imageFile,
-///   userId: user.uid,
-/// );
-/// ```
-class AvatarUploader {
-  AvatarUploader._();
-
-  /// Upload avatar a Firebase Storage
-  static Future<String> uploadToFirebase({
-    required File file,
-    required String userId,
-    Function(double progress)? onProgress,
-  }) async {
-    try {
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final ext = file.path.split('.').last.toLowerCase();
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('avatars')
-          .child(userId)
-          .child('$timestamp.$ext');
-
-      final contentType = switch (ext) {
-        'png' => 'image/png',
-        'webp' => 'image/webp',
-        'gif' => 'image/gif',
-        _ => 'image/jpeg',
-      };
-
-      final uploadTask = storageRef.putFile(
-        file,
-        SettableMetadata(contentType: contentType),
-      );
-      if (onProgress != null) {
-        uploadTask.snapshotEvents.listen((snapshot) {
-          final progress = snapshot.bytesTransferred / snapshot.totalBytes;
-          onProgress(progress);
-        });
-      }
-
-      final snapshot = await uploadTask;
-      return await snapshot.ref.getDownloadURL();
-
-    } catch (e) {
-      // En caso de error, retornar placeholder
-      return 'https://ui-avatars.com/api/?name=$userId&size=200';
-    }
-  }
-
-  /// Validar que el archivo sea una imagen válida
-  static bool isValidImage(File file) {
-    final extension = file.path.split('.').last.toLowerCase();
-    return ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(extension);
-  }
-
-  /// Validar tamaño máximo del archivo (en bytes)
-  static bool isValidSize(File file, {int maxSizeInMB = 5}) {
-    final sizeInMB = file.lengthSync() / (1024 * 1024);
-    return sizeInMB <= maxSizeInMB;
-  }
-}

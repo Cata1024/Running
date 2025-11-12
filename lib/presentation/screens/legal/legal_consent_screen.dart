@@ -106,10 +106,10 @@ class _LegalConsentScreenState extends ConsumerState<LegalConsentScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ListTile(
+                  const ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Documentos legales'),
-                    subtitle: const Text(
+                    title: Text('Documentos legales'),
+                    subtitle: Text(
                       'Revisa la Política de Privacidad y los Términos de Uso antes de continuar.',
                     ),
                   ),

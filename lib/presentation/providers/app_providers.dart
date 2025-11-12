@@ -1,14 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../core/constants/legal_constants.dart';
 import '../../data/repositories/level_progress_repository.dart';
 import '../../data/repositories/achievements_repository.dart';
 import '../../data/repositories/storage_repository.dart';
 import '../../data/services/api_service.dart';
+import '../../data/services/play_integrity_service.dart';
 import '../../data/services/firebase_auth_service.dart';
 import '../../core/services/audit_logger.dart';
 import '../../data/models/user_profile_dto.dart';
@@ -182,9 +183,14 @@ class RunStateNotifier extends Notifier<RunState> {
   void reset() => state = const RunState();
 }
 
+final playIntegrityServiceProvider = Provider<PlayIntegrityService>((ref) {
+  return PlayIntegrityService();
+});
+
 /// API Service provider
 final apiServiceProvider = Provider<ApiService>((ref) {
-  final service = ApiService();
+  final playIntegrityService = ref.watch(playIntegrityServiceProvider);
+  final service = ApiService(playIntegrityService: playIntegrityService);
   ref.onDispose(service.dispose);
   return service;
 });
@@ -196,13 +202,13 @@ final apiHealthProvider = FutureProvider.autoDispose<bool>((ref) async {
 
 final levelProgressRepositoryProvider = Provider<ILevelProgressRepository>((ref) {
   return LevelProgressRepository(
-    firestore: ref.watch(firestoreProvider),
+    api: ref.watch(apiServiceProvider),
   );
 });
 
 final achievementsRepositoryProvider = Provider<IAchievementsRepository>((ref) {
   return AchievementsRepository(
-    firestore: ref.watch(firestoreProvider),
+    api: ref.watch(apiServiceProvider),
   );
 });
 
@@ -216,10 +222,6 @@ final apiAuthHeadersProvider = FutureProvider<Map<String, String>>((ref) async {
   return api.authHeaders;
 });
 
-final firestoreProvider = Provider<FirebaseFirestore>((_) {
-  final app = Firebase.app();
-  return FirebaseFirestore.instanceFor(app: app, databaseId: 'territory-run-db');
-});
 
 /// Firebase Auth Service Provider
 final authServiceProvider = Provider<FirebaseAuthService>((ref) {
@@ -277,35 +279,71 @@ class LegalConsentNotifier extends Notifier<LegalConsent> {
   }
 
   Future<void> _loadConsent() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
-    if (raw == null) return;
     try {
-      state = LegalConsent.fromEncodedJson(raw);
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString(_storageKey);
+      
+      if (json != null) {
+        final consent = LegalConsent.fromEncodedJson(json);
+        // Verificar que las versiones sean válidas
+        if (consent.termsVersion.isNotEmpty && 
+            consent.privacyVersion.isNotEmpty) {
+          state = consent;
+          if (kDebugMode) {
+            debugPrint('Cargado consentimiento legal: ${consent.toJson()}');
+          }
+          return;
+        }
+      }
+      
+      // Si no hay datos válidos, establecer estado inicial
+      state = LegalConsent.initial();
+      
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('Error loading legal consent: $e');
+        debugPrint('Error cargando consentimiento legal: $e');
       }
+      state = LegalConsent.initial();
     }
   }
 
   Future<void> saveConsent(LegalConsent consent) async {
-    state = consent;
     try {
+      // Asegurarse de que las versiones estén establecidas
+      final consentToSave = consent.copyWith(
+        termsVersion: LegalConstants.termsVersion,
+        privacyVersion: LegalConstants.privacyVersion,
+      );
+      
+      // Guardar en el estado
+      state = consentToSave;
+      
+      // Persistir en SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_storageKey, consent.toEncodedJson());
+      final json = consentToSave.toEncodedJson();
+      final saved = await prefs.setString(_storageKey, json);
+      
+      if (kDebugMode) {
+        debugPrint('Consentimiento guardado: $saved - $json');
+      }
+      
+      // Registrar en analytics
       await ref.read(auditLoggerProvider).log('compliance.legal_consent', {
-        'termsVersion': consent.termsVersion,
-        'privacyVersion': consent.privacyVersion,
-        'locationConsent': consent.locationConsent,
-        'analyticsConsent': consent.analyticsConsent,
-        'marketingConsent': consent.marketingConsent,
-        'ageConfirmed': consent.ageConfirmed,
+        'termsVersion': consentToSave.termsVersion,
+        'privacyVersion': consentToSave.privacyVersion,
+        'locationConsent': consentToSave.locationConsent,
+        'analyticsConsent': consentToSave.analyticsConsent,
+        'marketingConsent': consentToSave.marketingConsent,
+        'ageConfirmed': consentToSave.ageConfirmed,
+        'saved': saved,
       });
+      
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('Error saving legal consent: $e');
+        debugPrint('Error guardando consentimiento legal: $e');
       }
+      // Re-lanzar el error para que el llamador pueda manejarlo
+      rethrow;
     }
   }
 
@@ -338,13 +376,42 @@ final hasCompleteProfileProvider = Provider<AsyncValue<bool>>((ref) {
   }
 
   final profileAsync = ref.watch(userProfileDtoProvider);
-  return profileAsync.whenData((dto) {
-    if (dto == null) return false;
-    final hasName = (dto.displayName ?? '').trim().isNotEmpty;
-    final hasBirth = dto.birthDate != null;
-    return hasName && hasBirth;
-  });
+
+  return profileAsync.when(
+    data: (dto) {
+      if (dto == null) {
+        return const AsyncValue<bool>.data(false);
+      }
+
+      final hasName = (dto.displayName ?? '').trim().isNotEmpty;
+      final hasBirth = dto.birthDate != null;
+      final completed = dto.completedOnboarding ?? (hasName && hasBirth);
+      return AsyncValue<bool>.data(completed && hasName && hasBirth);
+    },
+    loading: () => const AsyncValue<bool>.loading(),
+    error: (error, stackTrace) {
+      Future.microtask(() {
+        ref.read(auditLoggerProvider).log('auth.profile_fetch_error', {
+          'uid': user.uid,
+          'error': error.toString(),
+        });
+      });
+
+      if (_hasMinimalProfile(user)) {
+        if (kDebugMode) {
+          debugPrint('hasCompleteProfileProvider fallback (minimal profile) due to error: $error');
+        }
+        return const AsyncValue<bool>.data(true);
+      }
+      return AsyncValue<bool>.error(error, stackTrace);
+    },
+  );
 });
+
+bool _hasMinimalProfile(User user) {
+  final fallbackName = (user.displayName ?? user.email ?? '').trim();
+  return fallbackName.isNotEmpty;
+}
 
 
 final userRunsDtoProvider = FutureProvider.autoDispose<List<RunDto>>((ref) async {

@@ -10,6 +10,8 @@ class AchievementCard extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showProgress;
   final bool compact;
+  final double? compactWidth;
+  final EdgeInsetsGeometry? compactMargin;
 
   const AchievementCard({
     super.key,
@@ -17,6 +19,8 @@ class AchievementCard extends StatelessWidget {
     this.onTap,
     this.showProgress = true,
     this.compact = false,
+    this.compactWidth,
+    this.compactMargin,
   });
 
   @override
@@ -253,20 +257,23 @@ class AchievementCard extends StatelessWidget {
     bool isDark,
     Color rarityColor,
   ) {
+    final margin = compactMargin ?? const EdgeInsets.all(4);
+    final width = compactWidth ?? 80.0;
+
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
         onTap?.call();
       },
       child: Container(
-        width: 80,
-        margin: const EdgeInsets.all(4),
+        width: width,
+        margin: margin,
         child: Column(
           children: [
             // Icono
             Container(
-              width: 56,
-              height: 56,
+              width: width - 24,
+              height: width - 24,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: achievement.isUnlocked
@@ -293,7 +300,7 @@ class AchievementCard extends StatelessWidget {
                   Text(
                     achievement.icon,
                     style: TextStyle(
-                      fontSize: 24,
+                      fontSize: (width - 24) * 0.43,
                       color: achievement.isUnlocked ? null : Colors.grey,
                     ),
                   ),

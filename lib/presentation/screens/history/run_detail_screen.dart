@@ -93,7 +93,10 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
             return const Center(child: Text('Carrera no encontrada'));
           }
 
-          final route = _parseLineString(run.routeGeoJson);
+          var route = _parseLineString(run.routeGeoJson);
+          if (_isRouteTooSimple(route) && (run.polyline?.isNotEmpty ?? false)) {
+            route = _decodePolyline(run.polyline!);
+          }
           final polygon = _parsePolygon(run.polygonGeoJson);
           final settings = ref.watch(settingsProvider);
 
@@ -105,8 +108,17 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
             });
           }
 
-          // Usar ruta suavizada si está disponible, sino usar original
-          final displayRoute = _processedRoute?.smoothedPoints ?? route;
+          final processedRoute = _processedRoute;
+          List<LatLng> displayRoute = route;
+          if (processedRoute != null) {
+            final smoothed = processedRoute.smoothedPoints;
+            final simplified = processedRoute.simplifiedPoints;
+            if (smoothed.length >= 4) {
+              displayRoute = smoothed;
+            } else if (simplified.length >= 4) {
+              displayRoute = simplified;
+            }
+          }
 
           final icons = iconsAsync.maybeWhen(
             data: (bundle) => bundle,
@@ -415,6 +427,12 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
     return const [];
   }
 
+  bool _isRouteTooSimple(List<LatLng> route) => route.length < 4;
+
+  List<LatLng> _decodePolyline(String encoded) {
+    return _routeProcessor.decodePolyline(encoded);
+  }
+
   static List<LatLng> _parsePolygon(dynamic geojson) {
     // Si es un string, parsearlo primero
     if (geojson is String) {
@@ -490,9 +508,12 @@ class _RunDetailScreenState extends ConsumerState<RunDetailScreen> {
       final file = File('${tempDir.path}/territory_run_${run.id}_${DateTime.now().millisecondsSinceEpoch}.png');
       await file.writeAsBytes(bytes, flush: true);
 
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: shareText);
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text: shareText,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -660,7 +681,7 @@ class _ShareCard extends StatelessWidget {
                       _MetricChip(label: 'Ritmo', value: '$paceLabel min/km'),
                       _MetricChip(label: 'Velocidad', value: '$speedLabel km/h'),
                       if (isClosedCircuit)
-                        _MetricChip(label: 'Circuito', value: 'Cerrado', icon: Icons.check_circle),
+                        const _MetricChip(label: 'Circuito', value: 'Cerrado', icon: Icons.check_circle),
                       if (areaKm2 != null)
                         _MetricChip(label: 'Área ganada', value: '${areaKm2!.toStringAsFixed(3)} km²'),
                       if (weatherData != null)
@@ -802,7 +823,7 @@ class _RoutePainter extends CustomPainter {
       minLon -= 0.0005;
     }
 
-    Offset _toOffset(LatLng point) {
+    Offset toOffset(LatLng point) {
       final dx = (point.longitude - minLon) / (maxLon - minLon);
       final dy = (point.latitude - minLat) / (maxLat - minLat);
       return Offset(dx * size.width, size.height - dy * size.height);
@@ -818,10 +839,10 @@ class _RoutePainter extends CustomPainter {
 
     if (polygon.length >= 3) {
       final path = Path();
-      final first = _toOffset(polygon.first);
+      final first = toOffset(polygon.first);
       path.moveTo(first.dx, first.dy);
       for (final point in polygon.skip(1)) {
-        final offset = _toOffset(point);
+        final offset = toOffset(point);
         path.lineTo(offset.dx, offset.dy);
       }
       path.close();
@@ -840,10 +861,10 @@ class _RoutePainter extends CustomPainter {
 
     if (route.length >= 2) {
       final path = Path();
-      final first = _toOffset(route.first);
+      final first = toOffset(route.first);
       path.moveTo(first.dx, first.dy);
       for (final point in route.skip(1)) {
-        final offset = _toOffset(point);
+        final offset = toOffset(point);
         path.lineTo(offset.dx, offset.dy);
       }
 
@@ -856,14 +877,14 @@ class _RoutePainter extends CustomPainter {
       canvas.drawPath(path, routePaint);
 
       final startPaint = Paint()..color = routeColor.withValues(alpha: 0.3);
-      final startOffset = _toOffset(route.first);
+      final startOffset = toOffset(route.first);
       canvas.drawCircle(startOffset, 12, startPaint);
-      final endOffset = _toOffset(route.last);
+      final endOffset = toOffset(route.last);
       canvas.drawCircle(endOffset, 12, Paint()..color = routeColor);
     }
 
     if (homeLatValue != null && homeLonValue != null) {
-      final center = _toOffset(LatLng(homeLatValue, homeLonValue));
+      final center = toOffset(LatLng(homeLatValue, homeLonValue));
       final metersPerDegLat = 111320.0;
       final metersPerDegLon = 111320.0 * math.cos(homeLatValue * math.pi / 180);
       final degLatRadius = settings.homeRadiusMeters / metersPerDegLat;

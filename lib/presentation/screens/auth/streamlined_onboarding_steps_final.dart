@@ -89,12 +89,7 @@ class Step3Goal extends ConsumerWidget {
             value: 'fitness',
             isSelected: selectedGoal == 'fitness',
             onTap: () => _selectGoal(context, ref, 'fitness'),
-            gradient: LinearGradient(
-              colors: [
-                Colors.green.shade400,
-                Colors.green.shade600,
-              ],
-            ),
+            accentColor: theme.colorScheme.primary,
           ),
           
           const SizedBox(height: 16),
@@ -107,12 +102,7 @@ class Step3Goal extends ConsumerWidget {
             value: 'weight_loss',
             isSelected: selectedGoal == 'weight_loss',
             onTap: () => _selectGoal(context, ref, 'weight_loss'),
-            gradient: LinearGradient(
-              colors: [
-                Colors.orange.shade400,
-                Colors.orange.shade600,
-              ],
-            ),
+            accentColor: theme.colorScheme.secondary,
           ),
           
           const SizedBox(height: 16),
@@ -125,12 +115,7 @@ class Step3Goal extends ConsumerWidget {
             value: 'competition',
             isSelected: selectedGoal == 'competition',
             onTap: () => _selectGoal(context, ref, 'competition'),
-            gradient: LinearGradient(
-              colors: [
-                Colors.purple.shade400,
-                Colors.purple.shade600,
-              ],
-            ),
+            accentColor: theme.colorScheme.tertiary,
           ),
           
           const SizedBox(height: 16),
@@ -143,12 +128,7 @@ class Step3Goal extends ConsumerWidget {
             value: 'fun',
             isSelected: selectedGoal == 'fun',
             onTap: () => _selectGoal(context, ref, 'fun'),
-            gradient: LinearGradient(
-              colors: [
-                Colors.blue.shade400,
-                Colors.blue.shade600,
-              ],
-            ),
+            accentColor: theme.colorScheme.primaryContainer,
           ),
         ],
       ),
@@ -164,7 +144,7 @@ class _GoalCard extends StatelessWidget {
   final String value;
   final bool isSelected;
   final VoidCallback onTap;
-  final Gradient gradient;
+  final Color accentColor;
 
   const _GoalCard({
     required this.icon,
@@ -174,12 +154,20 @@ class _GoalCard extends StatelessWidget {
     required this.value,
     required this.isSelected,
     required this.onTap,
-    required this.gradient,
+    required this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final gradient = LinearGradient(
+      colors: [
+        _tint(accentColor, 0.25),
+        accentColor,
+      ],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
     
     return AeroCard(
       level: isSelected ? AeroLevel.medium : AeroLevel.ghost,
@@ -189,7 +177,7 @@ class _GoalCard extends StatelessWidget {
         decoration: isSelected
             ? BoxDecoration(
                 border: Border.all(
-                  color: theme.colorScheme.primary,
+                  color: accentColor,
                   width: 2,
                 ),
                 borderRadius: BorderRadius.circular(TerritoryTokens.radiusMedium),
@@ -232,7 +220,7 @@ class _GoalCard extends StatelessWidget {
                     title,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                      color: isSelected ? theme.colorScheme.primary : null,
+                      color: isSelected ? accentColor : null,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -247,7 +235,7 @@ class _GoalCard extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? theme.colorScheme.primary.withValues(alpha: 0.15)
+                          ? accentColor.withValues(alpha: 0.15)
                           : theme.colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -257,7 +245,7 @@ class _GoalCard extends StatelessWidget {
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                         color: isSelected
-                            ? theme.colorScheme.primary
+                            ? accentColor
                             : theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
                       ),
                     ),
@@ -270,13 +258,19 @@ class _GoalCard extends StatelessWidget {
             if (isSelected)
               Icon(
                 Icons.check_circle,
-                color: theme.colorScheme.primary,
+                color: accentColor,
                 size: 28,
               ),
           ],
         ),
       ),
     );
+  }
+
+  static Color _tint(Color color, double amount) {
+    final hsl = HSLColor.fromColor(color);
+    final lightness = (hsl.lightness + amount).clamp(0.0, 1.0);
+    return hsl.withLightness(lightness).toColor();
   }
 }
 
@@ -397,9 +391,7 @@ class Step4Ready extends ConsumerWidget {
                     icon: Icons.person_outline,
                     label: 'Perfil',
                     value: data.displayName,
-                    gradient: LinearGradient(
-                      colors: [Colors.blue.shade400, Colors.blue.shade600],
-                    ),
+                    accentColor: theme.colorScheme.primary,
                   ),
                   
                   const SizedBox(height: 16),
@@ -411,9 +403,7 @@ class Step4Ready extends ConsumerWidget {
                     icon: Icons.flag_outlined,
                     label: 'Objetivo',
                     value: '${_getGoalEmoji(data.goalType)} ${_getGoalName(data.goalType)}',
-                    gradient: LinearGradient(
-                      colors: [Colors.green.shade400, Colors.green.shade600],
-                    ),
+                    accentColor: theme.colorScheme.secondary,
                   ),
                   
                   const SizedBox(height: 16),
@@ -425,9 +415,7 @@ class Step4Ready extends ConsumerWidget {
                     icon: Icons.directions_run,
                     label: 'Meta semanal',
                     value: '${data.weeklyDistanceGoal.toStringAsFixed(0)} km',
-                    gradient: LinearGradient(
-                      colors: [Colors.orange.shade400, Colors.orange.shade600],
-                    ),
+                    accentColor: theme.colorScheme.tertiary,
                   ),
                   
                   const SizedBox(height: 16),
@@ -536,18 +524,26 @@ class _SummaryItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  final Gradient gradient;
+  final Color accentColor;
 
   const _SummaryItem({
     required this.icon,
     required this.label,
     required this.value,
-    required this.gradient,
+    required this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final gradient = LinearGradient(
+      colors: [
+        _tint(accentColor, 0.25),
+        accentColor,
+      ],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
     
     return Row(
       children: [
@@ -583,6 +579,12 @@ class _SummaryItem extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  static Color _tint(Color color, double amount) {
+    final hsl = HSLColor.fromColor(color);
+    final lightness = (hsl.lightness + amount).clamp(0.0, 1.0);
+    return hsl.withLightness(lightness).toColor();
   }
 }
 

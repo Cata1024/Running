@@ -48,6 +48,8 @@
   "noRunsYet": "Aún no tienes carreras",
   "startFirstRun": "¡Inicia tu primera carrera!",
   
+  "adjustmentStep": "Incremento",
+  
   "settingsApp": "Aplicación",
   "settingsTheme": "Tema",
   "settingsLanguage": "Idioma",
@@ -172,8 +174,9 @@
   "totalDuration": "Duración total",
   "averagePace": "Ritmo promedio",
   
-  "goal": "Meta",
+  "goal": "Objetivo",
   "goalWeekly": "Meta semanal",
+  "goalDescription": "Descripción del objetivo",
   "goalProgress": "Progreso",
   
   "about": "Acerca de",

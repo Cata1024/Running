@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/env_config.dart';
@@ -9,6 +10,7 @@ import '../../core/error/app_error.dart';
 import '../models/run_dto.dart';
 import '../models/user_profile_dto.dart';
 import '../models/territory_dto.dart';
+import 'play_integrity_service.dart';
 
 class ApiException extends AppError {
   final int statusCode;
@@ -25,15 +27,18 @@ class ApiService {
     String? baseUrl,
     FirebaseAuth? auth,
     http.Client? client,
+    PlayIntegrityService? playIntegrityService,
   })  : _auth = auth ?? FirebaseAuth.instance,
         _client = client ?? http.Client(),
         _baseUrl = _normalizeBaseUrl(
           baseUrl ?? EnvConfig.instance.backendApiUrl,
-        );
+        ),
+        _playIntegrityService = playIntegrityService;
 
   final FirebaseAuth _auth;
   final http.Client _client;
   final String _baseUrl;
+  final PlayIntegrityService? _playIntegrityService;
 
   static String _normalizeBaseUrl(String value) {
     if (value.isEmpty) {
@@ -52,10 +57,23 @@ class ApiService {
       throw ApiException(statusCode: 401, message: 'User not authenticated');
     }
     final idToken = await user.getIdToken();
-    return {
+    final headers = {
       'Authorization': 'Bearer $idToken',
       'Content-Type': 'application/json',
     };
+
+    if (_playIntegrityService != null) {
+      try {
+        final integrityToken = await _playIntegrityService.getIntegrityToken();
+        if (integrityToken != null && integrityToken.isNotEmpty) {
+          headers['X-Play-Integrity-Token'] = integrityToken;
+        }
+      } catch (error, stackTrace) {
+        debugPrint('Play integrity token error: $error\n$stackTrace');
+      }
+    }
+
+    return headers;
   }
 
   Future<Map<String, String>> get authHeaders => _authHeaders();
@@ -150,7 +168,15 @@ class ApiService {
   
   /// Alias para updateUserProfile (usa PATCH internamente)
   Future<void> updateUserProfile(String uid, Map<String, dynamic> data) async {
-    await patchUserProfile(uid, data);
+    try {
+      await patchUserProfile(uid, data);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        await upsertUserProfile(uid, data);
+      } else {
+        rethrow;
+      }
+    }
   }
 
   Future<Map<String, dynamic>?> fetchTerritory(String uid) async {
@@ -206,6 +232,151 @@ class ApiService {
 
   Future<void> deleteRun(String id) async {
     await _request('DELETE', '/runs/$id');
+  }
+
+  Future<void> deleteUserProfile(String uid) async {
+    await _request('DELETE', '/profile/$uid');
+  }
+
+  Future<void> deleteUserRuns(String uid) async {
+    await _request('DELETE', '/runs', query: {'uid': uid});
+  }
+
+  // ===== Achievements =====
+
+  Future<Map<String, dynamic>?> fetchAchievements(String uid) async {
+    final result = await _request('GET', '/achievements/$uid');
+    if (result is Map<String, dynamic>) {
+      return result;
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> saveAchievements(
+    String uid,
+    Map<String, dynamic> payload,
+  ) async {
+    final result = await _request('PUT', '/achievements/$uid', body: payload);
+    if (result is Map<String, dynamic>) {
+      return result;
+    }
+    return payload;
+  }
+
+  Future<Map<String, dynamic>> unlockAchievement(
+    String uid, {
+    required String achievementId,
+    int? currentValue,
+    DateTime? unlockedAt,
+  }) async {
+    final result = await _request(
+      'POST',
+      '/achievements/$uid/unlock',
+      body: {
+        'achievementId': achievementId,
+        if (currentValue != null) 'currentValue': currentValue,
+        if (unlockedAt != null) 'unlockedAt': unlockedAt.toIso8601String(),
+      },
+    );
+    if (result is Map<String, dynamic>) {
+      return result;
+    }
+    return {
+      'achievementId': achievementId,
+      if (currentValue != null) 'currentValue': currentValue,
+      if (unlockedAt != null) 'unlockedAt': unlockedAt.toIso8601String(),
+    };
+  }
+
+  // ===== Level Progression =====
+
+  Future<Map<String, dynamic>?> fetchLevelProgress(String uid) async {
+    final result = await _request('GET', '/level/$uid');
+    if (result is Map<String, dynamic>) {
+      return result;
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> saveLevelProgress(
+    String uid, {
+    required int totalXp,
+    required int level,
+    DateTime? updatedAt,
+  }) async {
+    final result = await _request(
+      'PUT',
+      '/level/$uid',
+      body: {
+        'totalXp': totalXp,
+        'level': level,
+        if (updatedAt != null) 'updatedAt': updatedAt.toIso8601String(),
+      },
+    );
+    if (result is Map<String, dynamic>) {
+      return result;
+    }
+    return {
+      'userId': uid,
+      'totalXp': totalXp,
+      'level': level,
+      if (updatedAt != null) 'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  Future<Map<String, dynamic>> incrementLevelXp(
+    String uid, {
+    required int xpDelta,
+  }) async {
+    final result = await _request(
+      'POST',
+      '/level/$uid/increment',
+      body: {
+        'xpDelta': xpDelta,
+      },
+    );
+    if (result is Map<String, dynamic>) {
+      return result;
+    }
+    return {
+      'userId': uid,
+      'totalXp': xpDelta,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> fetchLevelMilestones(
+    String uid, {
+    int limit = 20,
+  }) async {
+    final result = await _request(
+      'GET',
+      '/level/$uid/milestones',
+      query: {
+        'limit': limit.toString(),
+      },
+    );
+    if (result is List) {
+      return result
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return const [];
+  }
+
+  Future<Map<String, dynamic>> addLevelMilestone(
+    String uid, {
+    required Map<String, dynamic> payload,
+  }) async {
+    final result = await _request(
+      'POST',
+      '/level/$uid/milestones',
+      body: payload,
+    );
+    if (result is Map<String, dynamic>) {
+      return result;
+    }
+    return payload;
   }
 
   // ===== Legal & Compliance =====

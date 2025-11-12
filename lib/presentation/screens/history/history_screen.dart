@@ -7,6 +7,7 @@ import 'package:shimmer/shimmer.dart'; // agregar dependencia shimmer en pubspec
 import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/responsive/responsive_builder.dart';
 import '../../../core/widgets/aero_widgets.dart';
+import '../../../core/map_icons.dart';
 import '../../../core/utils/debouncer.dart';
 import '../../providers/app_providers.dart'; // contiene userRunsDtoProvider y historyFilterProvider
 import '../../../data/models/run_dto.dart';
@@ -480,11 +481,13 @@ class _FiltersSheet {
     required ValueChanged<RangeValues> onRangeChanged,
     required VoidCallback onClear,
   }) async {
+    final theme = Theme.of(context);
     await showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      barrierColor: theme.colorScheme.scrim.withValues(alpha: 0.45),
       builder: (context) {
         final theme = Theme.of(context);
         return Padding(
@@ -497,7 +500,7 @@ class _FiltersSheet {
                 return Padding(
                   padding: const EdgeInsets.all(TerritoryTokens.space16),
                   child: AeroSurface(
-                    level: AeroLevel.medium,
+                    level: AeroLevel.strong,
                     borderRadius:
                         BorderRadius.circular(TerritoryTokens.radiusXLarge),
                     padding: const EdgeInsets.all(TerritoryTokens.space16),
@@ -882,6 +885,7 @@ class _FiltersSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final activeBadges = _buildActiveBadges(filter);
 
     return AeroSurface(
       level: AeroLevel.medium,
@@ -891,78 +895,157 @@ class _FiltersSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Filtros',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color:
+                      theme.colorScheme.primary.withValues(alpha: 0.1),
+                  borderRadius:
+                      BorderRadius.circular(TerritoryTokens.radiusLarge),
+                ),
+                child: Icon(
+                  Icons.tune_rounded,
+                  color: theme.colorScheme.primary,
                 ),
               ),
-              const Spacer(),
-              IconButton(
+              const SizedBox(width: TerritoryTokens.space12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Filtros',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Personaliza cómo ves tu historial de carreras.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton.icon(
                 onPressed: onClear,
-                icon: Icon(
-                  Icons.refresh,
-                  size: 20,
-                  color: theme.colorScheme.onSurfaceVariant,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Restablecer'),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: TerritoryTokens.space12,
+                    vertical: 8,
+                  ),
                 ),
-                tooltip: 'Restablecer filtros',
               ),
             ],
           ),
-          const SizedBox(height: TerritoryTokens.space12),
-          Wrap(
-            spacing: TerritoryTokens.space8,
-            runSpacing: TerritoryTokens.space8,
-            children: [
-              AeroFilterChip(
-                label: 'Circuitos cerrados',
-                icon: Icons.route,
-                selected: filter.onlyClosed,
-                onSelected: (_) => onToggleClosed(!filter.onlyClosed),
+          if (activeBadges.isNotEmpty) ...[
+            const SizedBox(height: TerritoryTokens.space16),
+            Text(
+              'Filtros activos',
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
-              ..._quickRangeChips(context, filter, onPickDateRange),
-            ],
-          ),
-          const SizedBox(height: TerritoryTokens.space16),
-          Text(
-            'Rango de fechas',
-            style: theme.textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w600,
+            ),
+            const SizedBox(height: TerritoryTokens.space8),
+            Wrap(
+              spacing: TerritoryTokens.space8,
+              runSpacing: TerritoryTokens.space8,
+              children: activeBadges,
+            ),
+          ],
+          const SizedBox(height: TerritoryTokens.space20),
+          _FilterGroup(
+            icon: Icons.flash_on,
+            title: 'Accesos rápidos',
+            description: 'Activa filtros habituales en un toque.',
+            child: Wrap(
+              spacing: TerritoryTokens.space8,
+              runSpacing: TerritoryTokens.space8,
+              children: [
+                AeroFilterChip(
+                  label: 'Circuitos cerrados',
+                  icon: Icons.route,
+                  selected: filter.onlyClosed,
+                  onSelected: (_) => onToggleClosed(!filter.onlyClosed),
+                ),
+                ..._quickRangeChips(context, filter, onPickDateRange),
+              ],
             ),
           ),
-          const SizedBox(height: TerritoryTokens.space8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.date_range),
-              label: Text(RunUtils.formatDateRange(filter.start, filter.end)),
-              onPressed: () =>
-                  _openDatePicker(context, filter, onPickDateRange),
+          const SizedBox(height: TerritoryTokens.space20),
+          _FilterGroup(
+            icon: Icons.calendar_today,
+            title: 'Rango de fechas',
+            description: 'Explora carreras en un periodo específico.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.date_range),
+                  label: Text(
+                    RunUtils.formatDateRange(filter.start, filter.end),
+                  ),
+                  onPressed: () =>
+                      _openDatePicker(context, filter, onPickDateRange),
+                ),
+                const SizedBox(height: TerritoryTokens.space8),
+                Text(
+                  filter.start == null && filter.end == null
+                      ? 'Se muestran todas las fechas disponibles.'
+                      : 'Mostrando: ${RunUtils.formatDateRange(filter.start, filter.end)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: TerritoryTokens.space16),
-          Text(
-            'Distancia objetivo',
-            style: theme.textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          Text(
-            '${filter.minKm.toStringAsFixed(0)} - ${filter.maxKm.toStringAsFixed(0)} km',
-            style: theme.textTheme.bodySmall,
-          ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
-            ),
-            child: RangeSlider(
-              values: RangeValues(filter.minKm, filter.maxKm),
-              min: 0,
-              max: 100,
-              divisions: 100,
-              onChanged: onRangeChanged,
+          const SizedBox(height: TerritoryTokens.space20),
+          _FilterGroup(
+            icon: Icons.route,
+            title: 'Distancia objetivo',
+            description: 'Ajusta el rango de distancia en kilómetros.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    _rangeValuePill(
+                      context,
+                      label: 'Mín.',
+                      value: filter.minKm,
+                    ),
+                    const SizedBox(width: TerritoryTokens.space12),
+                    _rangeValuePill(
+                      context,
+                      label: 'Máx.',
+                      value: filter.maxKm,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: TerritoryTokens.space12),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 4,
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 10),
+                  ),
+                  child: RangeSlider(
+                    values: RangeValues(filter.minKm, filter.maxKm),
+                    min: 0,
+                    max: 100,
+                    divisions: 100,
+                    onChanged: onRangeChanged,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1073,6 +1156,162 @@ class _FiltersSection extends StatelessWidget {
 
   static DateTime _endOfDay(DateTime date) =>
       DateTime(date.year, date.month, date.day, 23, 59, 59, 999);
+
+  static List<Widget> _buildActiveBadges(HistoryFilter filter) {
+    final badges = <Widget>[];
+
+    badges.add(
+      _SummaryChip(
+        icon: Icons.route,
+        label:
+            '${_formatKm(filter.minKm)} - ${_formatKm(filter.maxKm)} km',
+      ),
+    );
+
+    if (filter.start != null || filter.end != null) {
+      badges.add(
+        _SummaryChip(
+          icon: Icons.date_range,
+          label: RunUtils.formatDateRange(filter.start, filter.end),
+        ),
+      );
+    }
+
+    if (filter.onlyClosed) {
+      badges.add(
+        const _SummaryChip(
+          icon: Icons.check_circle,
+          label: 'Circuitos cerrados',
+        ),
+      );
+    }
+
+    return badges;
+  }
+
+  static Widget _rangeValuePill(
+    BuildContext context, {
+    required String label,
+    required double value,
+  }) {
+    final theme = Theme.of(context);
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: TerritoryTokens.space12,
+          vertical: TerritoryTokens.space8,
+        ),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest
+              .withValues(alpha: 0.4),
+          borderRadius:
+              BorderRadius.circular(TerritoryTokens.radiusMedium),
+          border: Border.all(
+            color:
+                theme.colorScheme.outlineVariant.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${_formatKm(value)} km',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatKm(double value) {
+    if (value % 1 == 0) {
+      return value.toStringAsFixed(0);
+    }
+    return value.toStringAsFixed(1);
+  }
+}
+
+class _FilterGroup extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? description;
+  final Widget child;
+
+  const _FilterGroup({
+    required this.icon,
+    required this.title,
+    required this.child,
+    this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withValues(alpha: 0.08),
+                borderRadius:
+                    BorderRadius.circular(TerritoryTokens.radiusLarge),
+                border: Border.all(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Icon(
+                icon,
+                size: 20,
+                color: colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: TerritoryTokens.space12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (description != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      description!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: TerritoryTokens.space12),
+        child,
+      ],
+    );
+  }
 }
 
 /// ---------- Shimmer / placeholder ----------
@@ -1134,17 +1373,17 @@ class _RunsShimmerList extends StatelessWidget {
 }
 
 /// ---------- RunCard ----------
-class _RunCard extends StatefulWidget {
+class _RunCard extends ConsumerStatefulWidget {
   final RunDto run;
   final VoidCallback onTap;
 
   const _RunCard({required this.run, required this.onTap});
 
   @override
-  State<_RunCard> createState() => _RunCardState();
+  ConsumerState<_RunCard> createState() => _RunCardState();
 }
 
-class _RunCardState extends State<_RunCard> {
+class _RunCardState extends ConsumerState<_RunCard> {
   bool _isHovered = false;
 
   @override
@@ -1159,6 +1398,10 @@ class _RunCardState extends State<_RunCard> {
     final routeGeoJson = run.routeGeoJson;
     final coordinates = routeGeoJson?['coordinates'] as List<dynamic>? ?? [];
     final heroTag = 'run-${run.id}';
+    final icons = ref.watch(mapIconsProvider).maybeWhen(
+      data: (bundle) => bundle,
+      orElse: () => null,
+    );
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -1212,6 +1455,7 @@ class _RunCardState extends State<_RunCard> {
                           startedAt,
                           distanceM,
                           coordinates,
+                          icons,
                         ),
                         child: AnimatedScale(
                           scale: _isHovered ? 1.05 : 1.0,
@@ -1235,6 +1479,8 @@ class _RunCardState extends State<_RunCard> {
                                 borderRadius: 10,
                                 enableZoom: true,
                                 showRoutePolyline: true,
+                                startIcon: icons?.start,
+                                endIcon: icons?.finish,
                               ),
                             ),
                           ),
@@ -1375,6 +1621,7 @@ class _RunCardState extends State<_RunCard> {
     DateTime? startedAt,
     double distanceM,
     List<dynamic> coordinates,
+    MapIconsBundle? icons,
   ) {
     showDialog(
       context: context,
@@ -1432,6 +1679,8 @@ class _RunCardState extends State<_RunCard> {
                         routeCoordinates: coordinates,
                         enableZoom: true,
                         showRoutePolyline: true,
+                        startIcon: icons?.start,
+                        endIcon: icons?.finish,
                       ),
                     ),
                   ),

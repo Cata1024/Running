@@ -32,93 +32,34 @@ class ProfileActionsSection extends ConsumerWidget {
           children: [
             const SizedBox.shrink(),
             const SizedBox(height: TerritoryTokens.space12),
-            GridView.count(
-              crossAxisCount: MediaQuery.of(context).size.width >= 600 ? 4 : 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: TerritoryTokens.space12,
-              crossAxisSpacing: TerritoryTokens.space12,
-              childAspectRatio: 1.9,
-              children: MapType.values.map((type) {
-                final isSelected = type == mapType;
-                final foreground = isSelected
-                    ? theme.colorScheme.onPrimary
-                    : theme.colorScheme.onSurface;
-                final gradient = isSelected
-                    ? LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          theme.colorScheme.primaryContainer
-                              .withValues(alpha: 0.9),
-                          theme.colorScheme.secondaryContainer
-                              .withValues(alpha: 0.9),
-                        ],
-                      )
-                    : null;
-                final bgColor = isSelected
-                    ? null
-                    : theme.colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.6);
-                final label = _labelFor(type);
-                final icon = _iconFor(type);
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 600;
+                final columns = isWide ? 4 : 2;
+                final spacing = TerritoryTokens.space12;
+                final totalSpacing = spacing * (columns - 1);
+                final availableWidth = constraints.maxWidth - totalSpacing;
+                final tileWidth = (availableWidth / columns).clamp(0.0, constraints.maxWidth).toDouble();
 
-                return GestureDetector(
-                  onTap: () => mapTypeNotifier.setMapType(type),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeInOut,
-                    padding: const EdgeInsets.all(TerritoryTokens.space16),
-                    decoration: BoxDecoration(
-                      gradient: gradient,
-                      color: bgColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isSelected
-                            ? theme.colorScheme.primary
-                                .withValues(alpha: 0.5)
-                            : theme.dividerColor.withValues(alpha: 0.15),
-                      ),
-                      boxShadow: isSelected
-                          ? [
-                              BoxShadow(
-                                color: theme.colorScheme.primary
-                                    .withValues(alpha: 0.2),
-                                blurRadius: 14,
-                                offset: const Offset(0, 8),
-                              ),
-                            ]
-                          : [],
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: foreground.withValues(alpha: 0.1),
-                          ),
-                          child: Icon(
-                            icon,
-                            size: 22,
-                            color: foreground,
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: MapType.values
+                      .map(
+                        (type) => SizedBox(
+                          width: tileWidth,
+                          child: _MapTypeTile(
+                            type: type,
+                            isSelected: type == mapType,
+                            label: _labelFor(type),
+                            icon: _iconFor(type),
+                            onTap: () => mapTypeNotifier.setMapType(type),
                           ),
                         ),
-                        const SizedBox(height: TerritoryTokens.space8),
-                        Text(
-                          label,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: foreground,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                      )
+                      .toList(),
                 );
-              }).toList(),
+              },
             ),
             const SizedBox(height: TerritoryTokens.space12),
             AeroButton(
@@ -199,5 +140,96 @@ class ProfileActionsSection extends ConsumerWidget {
       case MapType.none:
         return Icons.grid_off_outlined;
     }
+  }
+}
+
+class _MapTypeTile extends StatelessWidget {
+  final MapType type;
+  final bool isSelected;
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _MapTypeTile({
+    required this.type,
+    required this.isSelected,
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final foreground = isSelected
+        ? theme.colorScheme.onPrimary
+        : theme.colorScheme.onSurface;
+    final gradient = isSelected
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              theme.colorScheme.primaryContainer.withValues(alpha: 0.9),
+              theme.colorScheme.secondaryContainer.withValues(alpha: 0.9),
+            ],
+          )
+        : null;
+    final bgColor = isSelected
+        ? null
+        : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.all(TerritoryTokens.space16),
+        decoration: BoxDecoration(
+          gradient: gradient,
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? theme.colorScheme.primary.withValues(alpha: 0.5)
+                : theme.dividerColor.withValues(alpha: 0.15),
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                    blurRadius: 14,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : [],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: foreground.withValues(alpha: 0.1),
+              ),
+              child: Icon(
+                icon,
+                size: 22,
+                color: foreground,
+              ),
+            ),
+            const SizedBox(height: TerritoryTokens.space8),
+            Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: foreground,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

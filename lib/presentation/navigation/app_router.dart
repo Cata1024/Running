@@ -1,8 +1,10 @@
 import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../../../domain/entities/legal_consent.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -29,20 +31,41 @@ import '../../core/design_system/territory_tokens.dart';
 import 'custom_page_transition.dart';
 import '../../core/constants/legal_constants.dart';
 
-/// Notificador para GoRouter que reacciona a cambios de auth y perfil.
+/// Notificador para GoRouter que reacciona a cambios de auth, perfil y consentimiento legal.
 class RedirectNotifier extends ChangeNotifier {
   final Ref _ref;
+  bool _isInitialized = false;
 
   RedirectNotifier(this._ref) {
-    // Escuchar cambios en el estado de autenticación y perfil
-    _ref.listen(
+    _init();
+  }
+
+  Future<void> _init() async {
+    // Escuchar cambios en el estado de autenticación, perfil y consentimiento
+    _ref.listen<AsyncValue<User?>>(
       authStateStreamProvider,
       (_, __) => notifyListeners(),
     );
-    _ref.listen(
+    
+    _ref.listen<AsyncValue<bool>>(
       hasCompleteProfileProvider,
       (_, __) => notifyListeners(),
     );
+    
+    // Escuchar cambios en el consentimiento legal
+    _ref.listen<LegalConsent>(
+      legalConsentProvider,
+      (previous, next) {
+        if (_isInitialized) {
+          notifyListeners();
+        }
+      },
+    );
+    
+    // Esperar a que se cargue el estado inicial
+    await Future.delayed(Duration.zero);
+    _isInitialized = true;
+    notifyListeners();
   }
 }
 
@@ -385,7 +408,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     AeroNavBarItem(icon: Icons.person_outline, label: 'Perfil'),
   ];
 
-  late final Widget _persistentMap = RunScreen(
+  late final Widget _persistentMap = const RunScreen(
     onRunStateChanged: null,
   );
 

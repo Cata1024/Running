@@ -22,6 +22,9 @@ class RegistrationData {
   
   // Preferencias
   final String preferredUnits; // 'metric' o 'imperial'
+
+  /// Marca si el usuario completó todo el onboarding
+  final bool completedOnboarding;
   
   // Método de autenticación usado
   final AuthMethod authMethod;
@@ -39,6 +42,7 @@ class RegistrationData {
     this.goalDescription,
     this.preferredUnits = 'metric',
     required this.authMethod,
+    this.completedOnboarding = false,
   });
 
   /// Validar que los datos estén completos
@@ -75,6 +79,7 @@ class RegistrationData {
       'weeklyDistanceGoal': weeklyDistanceGoal,
       if (goalDescription != null) 'goalDescription': goalDescription,
       'preferredUnits': preferredUnits,
+      'completedOnboarding': completedOnboarding,
       'createdAt': DateTime.now().toIso8601String(),
       'level': 1,
       'experience': 0,
@@ -98,6 +103,7 @@ class RegistrationData {
     String? goalDescription,
     String? preferredUnits,
     AuthMethod? authMethod,
+    bool? completedOnboarding,
   }) {
     return RegistrationData(
       email: email ?? this.email,
@@ -112,6 +118,7 @@ class RegistrationData {
       goalDescription: goalDescription ?? this.goalDescription,
       preferredUnits: preferredUnits ?? this.preferredUnits,
       authMethod: authMethod ?? this.authMethod,
+      completedOnboarding: completedOnboarding ?? this.completedOnboarding,
     );
   }
 }

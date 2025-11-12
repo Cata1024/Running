@@ -1,47 +1,303 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <!-- Base href DEBE ser / para Firebase Hosting -->
-  <base href="/">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Territory Run — Conquista tu Ciudad</title>
 
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
-  <meta name="description" content="Territory Run - Conquista tu ciudad">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
-  <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Territory Run">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <style>
+    /* === VARIABLES DE COLOR === */
+    :root {
+      --accent: #00f5d4;
+      --accent-2: #00bbf9;
+      --text: #ffffff;
+      --text-secondary: #cbd5e1;
+      --border-glass: rgba(255, 255, 255, 0.2);
+      --glass-bg: rgba(255, 255, 255, 0.08);
+      --shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+    }
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+    @media (prefers-color-scheme: light) {
+      :root {
+        --text: #0f172a;
+        --text-secondary: #475569;
+        --border-glass: rgba(0, 0, 0, 0.1);
+        --glass-bg: rgba(255, 255, 255, 0.6);
+        --shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+      }
+    }
 
-  <title>Territory Run</title>
-  <link rel="manifest" href="manifest.json">
+    /* === ESTILOS BASE === */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      background: url('screenshots/image5.jpg') no-repeat center center fixed;
+      background-size: cover;
+      overflow-x: hidden;
+    }
 
-  <!-- Mejoras de fuentes para evitar fallback por red lenta -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Opcional: usa tu familia real si usas Google Fonts -->
-  <!-- <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet"> -->
+    .glass {
+      background: var(--glass-bg);
+      border: 1px solid var(--border-glass);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+      border-radius: 24px;
+    }
 
-  <!-- Meta viewport para mejor layout responsive -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
 
-  <!-- Callback opcional para saber cuándo está lista la API de Maps -->
-  <script>
-    function initGm() { window.mapsApiLoaded = true; }
-  </script>
+    /* === NAV === */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 32px 0;
+      position: relative;
+      z-index: 10;
+    }
 
-  <!-- Google Maps con loading=async (patrón recomendado) -->
-  <script async
-          src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD7p9SqQYqJ87vWdBXa_lJKUIxL91h79s4&v=weekly&libraries=geometry,places&loading=async&callback=initGm">
-  </script>
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-icon {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #000;
+      font-weight: 900;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+    }
+
+    .nav-text {
+      font-weight: 800;
+      font-size: 20px;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-weight: 600;
+      margin-left: 28px;
+    }
+
+    .nav-links a:hover { color: var(--accent); }
+
+    /* === HERO === */
+    .hero {
+      text-align: center;
+      padding: 160px 20px 200px;
+      position: relative;
+      z-index: 1;
+      color: white;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: -1;
+    }
+
+    .hero h1 {
+      font-size: clamp(48px, 8vw, 84px);
+      font-weight: 900;
+      margin-bottom: 24px;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      max-width: 680px;
+      margin: 0 auto 48px;
+      font-size: 20px;
+      color: var(--text-secondary);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 32px;
+      border-radius: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      font-size: 16px;
+      transition: 0.3s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #000;
+    }
+
+    .btn-primary:hover { transform: translateY(-2px); }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid var(--border-glass);
+      color: white;
+    }
+
+    /* === SECCIONES GLASS === */
+    section.glass-section {
+      margin: 60px auto;
+      padding: 60px 40px;
+    }
+
+    /* === SCREENSHOTS === */
+    .showcase-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 32px;
+      text-align: center;
+    }
+
+    .screenshot-frame {
+      position: relative;
+      border-radius: 32px;
+      overflow: hidden;
+      border: 1px solid var(--border-glass);
+      box-shadow: var(--shadow);
+      aspect-ratio: 9/19.5;
+      background: rgba(0,0,0,0.2);
+    }
+
+    .screenshot-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .screenshot-label {
+      margin-top: 16px;
+      font-weight: 700;
+      font-size: 18px;
+    }
+
+    .screenshot-desc {
+      margin-top: 8px;
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      text-align: left;
+    }
+
+    footer {
+      text-align: center;
+      padding: 40px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+  </style>
 </head>
+
 <body>
-  <!-- Arranque Flutter Web recomendado: solo incluye estos scripts -->
-  <script src="flutter.js" defer></script>
-  <script src="flutter_bootstrap.js" async></script>
+  <div class="container">
+    <nav>
+      <div class="nav-logo">
+        <div class="nav-icon">TR</div>
+        <div class="nav-text">Territory Run</div>
+      </div>
+      <div class="nav-links">
+        <a href="#screenshots">Capturas</a>
+        <a href="#download">Descargar</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <h1>Conquista tu ciudad<br><span class="gradient-text">un paso a la vez</span></h1>
+      <p>Transforma cada carrera en una aventura urbana. Visualiza tu progreso, desbloquea territorios y compite con corredores de todo el mundo.</p>
+      <a href="#download" class="btn btn-primary"><i class="fas fa-download"></i> Descargar Ahora</a>
+      <a href="#screenshots" class="btn btn-secondary"><i class="fas fa-play"></i> Ver Capturas</a>
+    </section>
+
+    <section id="screenshots" class="glass-section glass">
+      <h2 style="text-align:center; margin-bottom:40px;">Vistas destacadas</h2>
+      <div class="showcase-grid">
+        <div>
+          <div class="screenshot-frame">
+            <img src="screenshots/image1.jpg" alt="Mapa de Territorios">
+          </div>
+          <div class="screenshot-label">Mapa de Territorios</div>
+          <p class="screenshot-desc">Transforma cada carrera en una aventura de exploración urbana:<br>
+          🗺️ Seguimiento en tiempo real<br>
+          🎯 Territorios por descubrir<br>
+          ⚡ Estadísticas en vivo<br>
+          🏆 Desafíos locales<br>
+          🌙 Modo nocturno</p>
+        </div>
+
+        <div>
+          <div class="screenshot-frame">
+            <img src="screenshots/image2.jpg" alt="Detalle de Carrera">
+          </div>
+          <div class="screenshot-label">Detalle de Carrera</div>
+          <p class="screenshot-desc">Cada carrera es una historia única:<br>
+          📊 Métricas avanzadas<br>
+          🏅 Logros desbloqueados<br>
+          🌦️ Registro climático<br>
+          🗺️ Vista 3D<br>
+          📱 Comparte tu éxito</p>
+        </div>
+
+        <div>
+          <div class="screenshot-frame">
+            <img src="screenshots/image3.jpg" alt="Perfil del Corredor">
+          </div>
+          <div class="screenshot-label">Perfil del Corredor</div>
+          <p class="screenshot-desc">Tu evolución y progreso:<br>
+          📈 Estadísticas globales<br>
+          🏆 Colección de logros<br>
+          👥 Comunidad<br>
+          🎯 Objetivos personales<br>
+          📅 Calendario de actividad</p>
+        </div>
+
+        <div>
+          <div class="screenshot-frame">
+            <img src="screenshots/image4.jpg" alt="Logros y Recompensas">
+          </div>
+          <div class="screenshot-label">Logros y Recompensas</div>
+          <p class="screenshot-desc">Cada paso cuenta:<br>
+          🏅 Desafíos por niveles<br>
+          🌍 Explorador urbano<br>
+          ⏱️ Récords personales<br>
+          🎖️ Insignias especiales<br>
+          🏆 Clasificaciones</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="glass-section glass" style="text-align:center;">
+      <h2>Comienza tu aventura</h2>
+      <p>Descarga Territory Run y transforma tus carreras en conquistas épicas.</p>
+      <a href="territory-run-beta.apk" download class="btn btn-primary"><i class="fas fa-download"></i> Descargar APK</a>
+    </section>
+
+    <footer>© 2025 Territory Run · Corre · Conquista · Comparte</footer>
+  </div>
 </body>
 </html>

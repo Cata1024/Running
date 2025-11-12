@@ -9,6 +9,8 @@ class MiniMap extends StatelessWidget {
   final double borderRadius;
   final bool enableZoom;
   final bool showRoutePolyline;
+  final BitmapDescriptor? startIcon;
+  final BitmapDescriptor? endIcon;
 
   const MiniMap({
     super.key,
@@ -18,6 +20,8 @@ class MiniMap extends StatelessWidget {
     this.borderRadius = 12,
     this.enableZoom = false,
     this.showRoutePolyline = true,
+    this.startIcon,
+    this.endIcon,
   });
 
   @override
@@ -100,14 +104,14 @@ class MiniMap extends StatelessWidget {
             Marker(
               markerId: const MarkerId('start'),
               position: points.first,
-              icon: BitmapDescriptor.defaultMarkerWithHue(
+              icon: startIcon ?? BitmapDescriptor.defaultMarkerWithHue(
                 BitmapDescriptor.hueGreen,
               ),
             ),
             Marker(
               markerId: const MarkerId('end'),
               position: points.last,
-              icon: BitmapDescriptor.defaultMarkerWithHue(
+              icon: endIcon ?? BitmapDescriptor.defaultMarkerWithHue(
                 BitmapDescriptor.hueRed,
               ),
             ),

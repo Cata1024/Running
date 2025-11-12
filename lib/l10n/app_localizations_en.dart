@@ -126,6 +126,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get startFirstRun => 'Start your first run!';
 
   @override
+  String get adjustmentStep => 'Adjustment step';
+
+  @override
   String get settingsApp => 'Application';
 
   @override
@@ -443,6 +446,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get goalWeekly => 'Weekly goal';
+
+  @override
+  String get goalDescription => 'Goal description';
 
   @override
   String get goalProgress => 'Progress';

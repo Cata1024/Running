@@ -103,6 +103,23 @@ app.get("/test-mongo", async (_req, res) => {
   }
 });
 
+app.delete("/runs", async (req, res) => {
+  const { uid, isServiceAccount } = getAuthContext(req);
+  const queryUid = typeof req.query.uid === "string" && req.query.uid.trim().length > 0 ? req.query.uid.trim() : null;
+  const targetUid = queryUid ?? uid;
+  if (!targetUid) return res.status(400).json({ error: "Missing uid" });
+  if (!isServiceAccount && targetUid !== uid) return res.status(403).json({ error: "Forbidden" });
+
+  try {
+    const runsCollection = await getCollection(collectionRuns);
+    const result = await runsCollection.deleteMany({ userId: targetUid });
+    res.json({ success: true, deletedCount: result.deletedCount ?? 0 });
+  } catch (error) {
+    logger.error("Failed to delete runs", error);
+    res.status(500).json({ error: "Failed to delete runs" });
+  }
+});
+
 // Helpers
 const isPlainObject = (value) => Object.prototype.toString.call(value) === "[object Object]";
 const ensureBodyObject = (body) => (isPlainObject(body) ? null : "Body must be a JSON object");
@@ -169,6 +186,7 @@ const allowedConsentFields = [
 
 const VALID_ARCO_TYPES = ["access", "rectify", "delete", "revoke"];
 const VALID_ARCO_STATUSES = ["open", "in_progress", "closed"];
+const VALID_REWARD_TYPES = ["milestone", "legendary"];
 
 const ADMIN_UIDS = new Set(
   (process.env.ADMIN_UIDS || "")
@@ -182,6 +200,146 @@ const PUBLIC_GET_PATHS = new Set(["/legal/documents"]);
 const isFiniteNumber = (value) => typeof value === "number" && Number.isFinite(value);
 const isBoolean = (value) => typeof value === "boolean";
 const isIsoString = (value) => typeof value === "string" && !Number.isNaN(Date.parse(value));
+
+// Level system helpers (must match client-side LevelSystem constants)
+const LEVEL_SYSTEM = {
+  MAX_LEVEL: 50,
+  BASE_XP: 100,
+  EXPONENT: 1.5,
+};
+
+const xpForLevel = (level) => {
+  if (level <= 1) return 0;
+  return Math.round(LEVEL_SYSTEM.BASE_XP * Math.pow(level - 1, LEVEL_SYSTEM.EXPONENT));
+};
+
+const totalXpForLevel = (level) => {
+  if (level <= 1) return 0;
+  let total = 0;
+  for (let i = 2; i <= level; i += 1) {
+    total += xpForLevel(i);
+  }
+  return total;
+};
+
+const levelFromXp = (totalXp) => {
+  if (!Number.isFinite(totalXp) || totalXp <= 0) return 1;
+  for (let level = 1; level <= LEVEL_SYSTEM.MAX_LEVEL; level += 1) {
+    if (totalXp < totalXpForLevel(level + 1)) {
+      return level;
+    }
+  }
+  return LEVEL_SYSTEM.MAX_LEVEL;
+};
+
+const sanitizeAchievementsPayload = (payload) => {
+  if (!isPlainObject(payload)) return null;
+  const { achievements, totalXp, unlockedCount } = payload;
+  if (!isPlainObject(achievements)) return null;
+  const sanitizedAchievements = {};
+  Object.entries(achievements).forEach(([key, value]) => {
+    if (!isPlainObject(value)) return;
+    const currentValue = Number.isFinite(value.currentValue) ? Number(value.currentValue) : 0;
+    const isUnlocked = Boolean(value.isUnlocked);
+    const unlockedAt = value.unlockedAt && isIsoString(value.unlockedAt) ? new Date(value.unlockedAt).toISOString() : null;
+    sanitizedAchievements[key] = {
+      currentValue,
+      isUnlocked,
+      unlockedAt,
+    };
+  });
+
+  return {
+    achievements: sanitizedAchievements,
+    totalXp: Number.isFinite(totalXp) ? Number(totalXp) : 0,
+    unlockedCount: Number.isFinite(unlockedCount) ? Number(unlockedCount) : 0,
+  };
+};
+
+const validateAchievementsPayload = (payload) => {
+  const errors = [];
+  if (!payload) {
+    errors.push("Payload must be an object");
+    return errors;
+  }
+  if (!isPlainObject(payload.achievements)) {
+    errors.push("achievements must be an object");
+  }
+  if (!Number.isFinite(payload.totalXp)) {
+    errors.push("totalXp must be a number");
+  }
+  if (!Number.isFinite(payload.unlockedCount)) {
+    errors.push("unlockedCount must be a number");
+  }
+  return errors;
+};
+
+const sanitizeLevelProgressPayload = (payload) => {
+  if (!isPlainObject(payload)) return null;
+  const totalXp = Number.isFinite(payload.totalXp) ? Number(payload.totalXp) : 0;
+  const level = Number.isFinite(payload.level) ? Number(payload.level) : levelFromXp(totalXp);
+  const updatedAt = payload.updatedAt && isIsoString(payload.updatedAt)
+    ? new Date(payload.updatedAt).toISOString()
+    : new Date().toISOString();
+  return {
+    totalXp,
+    level,
+    updatedAt,
+  };
+};
+
+const validateLevelProgressPayload = (payload) => {
+  const errors = [];
+  if (!payload) {
+    errors.push("Payload must be an object");
+    return errors;
+  }
+  if (!Number.isFinite(payload.totalXp)) {
+    errors.push("totalXp must be a number");
+  }
+  if (!Number.isFinite(payload.level)) {
+    errors.push("level must be a number");
+  }
+  return errors;
+};
+
+const sanitizeMilestonePayload = (payload) => {
+  if (!isPlainObject(payload)) return null;
+  const base = {
+    oldLevel: Number.isFinite(payload.oldLevel) ? Number(payload.oldLevel) : 0,
+    newLevel: Number.isFinite(payload.newLevel) ? Number(payload.newLevel) : 0,
+    xpGained: Number.isFinite(payload.xpGained) ? Number(payload.xpGained) : 0,
+    totalXp: Number.isFinite(payload.totalXp) ? Number(payload.totalXp) : 0,
+    rewardType:
+      typeof payload.rewardType === "string" && VALID_REWARD_TYPES.includes(payload.rewardType)
+        ? payload.rewardType
+        : null,
+    achievedAt: payload.achievedAt && isIsoString(payload.achievedAt)
+      ? new Date(payload.achievedAt).toISOString()
+      : new Date().toISOString(),
+  };
+  return base;
+};
+
+const validateMilestonePayload = (payload) => {
+  const errors = [];
+  if (!payload) {
+    errors.push("Payload must be an object");
+    return errors;
+  }
+  ["oldLevel", "newLevel", "xpGained", "totalXp"].forEach((field) => {
+    if (!Number.isFinite(payload[field])) {
+      errors.push(`${field} must be a number`);
+    }
+  });
+  if (payload.rewardType !== null && payload.rewardType !== undefined && !VALID_REWARD_TYPES.includes(payload.rewardType)) {
+    errors.push(`rewardType must be one of ${VALID_REWARD_TYPES.join(", ")}`);
+  }
+  if (payload.achievedAt !== undefined && !isIsoString(payload.achievedAt)) {
+    errors.push("achievedAt must be an ISO string");
+  }
+  return errors;
+};
 
 const isAdminUid = (uid) => uid && ADMIN_UIDS.has(uid);
 
@@ -563,6 +721,9 @@ const collectionLegalDocuments = "legal_documents";
 const collectionLegalConsents = "legal_consents";
 const collectionLegalConsentHistory = "legal_consent_history";
 const collectionArcoRequests = "arco_requests";
+const collectionAchievements = "achievements";
+const collectionLevelProgress = "level_progress";
+const collectionLevelMilestones = "level_milestones";
 
 // Rutas
 app.get("/health", async (_req, res) => {
@@ -644,6 +805,40 @@ app.patch("/profile/:uid", async (req, res) => {
   res.json({ success: true });
 });
 
+app.delete("/profile/:uid", async (req, res) => {
+  const { uid, isServiceAccount } = getAuthContext(req);
+  const targetUid = req.params.uid;
+  if (!targetUid) return res.status(400).json({ error: "Missing uid" });
+  if (!isServiceAccount && targetUid !== uid) return res.status(403).json({ error: "Forbidden" });
+
+  try {
+    const usersCollection = await getCollection(collectionUsers);
+    const achievementsCollection = await getCollection(collectionAchievements);
+    const levelCollection = await getCollection(collectionLevelProgress);
+    const milestonesCollection = await getCollection(collectionLevelMilestones);
+    const territoryCollection = await getCollection(collectionTerritory);
+    const runsCollection = await getCollection(collectionRuns);
+
+    await Promise.all([
+      achievementsCollection.deleteOne({ userId: targetUid }),
+      levelCollection.deleteOne({ userId: targetUid }),
+      milestonesCollection.deleteMany({ userId: targetUid }),
+      territoryCollection.deleteOne({ _id: targetUid }),
+      runsCollection.deleteMany({ userId: targetUid }),
+    ]);
+
+    const result = await usersCollection.deleteOne({ _id: targetUid });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Profile not found" });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error("Failed to delete profile", error);
+    res.status(500).json({ error: "Failed to delete profile" });
+  }
+});
+
 app.get("/territory/:uid", async (req, res) => {
   const { uid, isServiceAccount } = getAuthContext(req);
   const targetUid = req.params.uid;
@@ -675,6 +870,381 @@ app.put("/territory/:uid", async (req, res) => {
 
   await territoryCollection.updateOne({ _id: targetUid }, { $set: payload }, { upsert: true });
   res.json({ success: true });
+});
+
+// ========= ACHIEVEMENTS =========
+
+const mapAchievementDocument = (doc) => {
+  if (!doc) {
+    return null;
+  }
+  const mapped = mapDocumentWithId(doc);
+  return {
+    id: mapped.id,
+    userId: mapped.userId,
+    achievements: mapped.achievements ?? {},
+    totalXp: mapped.totalXp ?? 0,
+    unlockedCount: mapped.unlockedCount ?? 0,
+    updatedAt: mapped.updatedAt ?? null,
+    createdAt: mapped.createdAt ?? null,
+  };
+};
+
+app.get("/achievements/:uid", async (req, res) => {
+  const { uid, isServiceAccount } = getAuthContext(req);
+  const targetUid = req.params.uid;
+  if (!targetUid) return res.status(400).json({ error: "Missing uid" });
+  if (!isServiceAccount && targetUid !== uid) return res.status(403).json({ error: "Forbidden" });
+
+  try {
+    const achievementsCollection = await getCollection(collectionAchievements);
+    const doc = await achievementsCollection.findOne({ userId: targetUid });
+    if (!doc) {
+      return res.json({
+        userId: targetUid,
+        achievements: {},
+        totalXp: 0,
+        unlockedCount: 0,
+        createdAt: null,
+        updatedAt: null,
+      });
+    }
+    res.json(mapAchievementDocument(doc));
+  } catch (error) {
+    logger.error("Failed to fetch achievements", error);
+    res.status(500).json({ error: "Failed to fetch achievements" });
+  }
+});
+
+app.put("/achievements/:uid", async (req, res) => {
+  const { uid, isServiceAccount } = getAuthContext(req);
+  const targetUid = req.params.uid;
+  if (!targetUid) return res.status(400).json({ error: "Missing uid" });
+  if (!isServiceAccount && targetUid !== uid) return res.status(403).json({ error: "Forbidden" });
+  const invalid = ensureBodyObject(req.body);
+  if (invalid) return res.status(400).json({ error: invalid });
+
+  const sanitized = sanitizeAchievementsPayload(req.body);
+  const errors = validateAchievementsPayload(sanitized);
+  if (errors.length > 0) {
+    return res.status(400).json({ error: "Invalid achievements payload", details: errors });
+  }
+
+  try {
+    const achievementsCollection = await getCollection(collectionAchievements);
+    const now = new Date().toISOString();
+    const payload = {
+      userId: targetUid,
+      achievements: sanitized.achievements,
+      totalXp: sanitized.totalXp,
+      unlockedCount: sanitized.unlockedCount,
+      updatedAt: now,
+    };
+
+    const result = await achievementsCollection.findOneAndUpdate(
+      { userId: targetUid },
+      {
+        $set: payload,
+        $setOnInsert: {
+          createdAt: now,
+        },
+      },
+      {
+        upsert: true,
+        returnDocument: "after",
+      },
+    );
+
+    const updatedDoc = result.value ?? payload;
+    res.json(mapAchievementDocument(updatedDoc));
+  } catch (error) {
+    logger.error("Failed to save achievements", error);
+    res.status(500).json({ error: "Failed to save achievements" });
+  }
+});
+
+app.post("/achievements/:uid/unlock", async (req, res) => {
+  const { uid, isServiceAccount } = getAuthContext(req);
+  const targetUid = req.params.uid;
+  if (!targetUid) return res.status(400).json({ error: "Missing uid" });
+  if (!isServiceAccount && targetUid !== uid) return res.status(403).json({ error: "Forbidden" });
+  const invalid = ensureBodyObject(req.body);
+  if (invalid) return res.status(400).json({ error: invalid });
+
+  const { achievementId, currentValue, unlockedAt } = req.body;
+  if (typeof achievementId !== "string" || achievementId.trim().length === 0) {
+    return res.status(400).json({ error: "achievementId is required" });
+  }
+
+  const normalizedId = achievementId.trim();
+  const normalizedUnlockedAt = unlockedAt && isIsoString(unlockedAt)
+    ? new Date(unlockedAt).toISOString()
+    : new Date().toISOString();
+  const normalizedCurrentValue = Number.isFinite(currentValue) ? Number(currentValue) : null;
+
+  try {
+    const achievementsCollection = await getCollection(collectionAchievements);
+    const now = new Date().toISOString();
+    const doc = await achievementsCollection.findOne({ userId: targetUid });
+    const achievements = (doc && isPlainObject(doc.achievements)) ? { ...doc.achievements } : {};
+    const existingEntry = achievements[normalizedId] ?? {};
+    const existingCurrentValue = Number.isFinite(existingEntry.currentValue)
+      ? Number(existingEntry.currentValue)
+      : 0;
+
+    achievements[normalizedId] = {
+      currentValue: normalizedCurrentValue ?? Math.max(existingCurrentValue, 1),
+      isUnlocked: true,
+      unlockedAt: normalizedUnlockedAt,
+    };
+
+    const unlockedCount = Object.values(achievements).filter((entry) => entry && entry.isUnlocked).length;
+
+    const payload = {
+      userId: targetUid,
+      achievements,
+      totalXp: doc?.totalXp ?? 0,
+      unlockedCount,
+      updatedAt: now,
+    };
+
+    const result = await achievementsCollection.findOneAndUpdate(
+      { userId: targetUid },
+      {
+        $set: payload,
+        $setOnInsert: {
+          createdAt: now,
+        },
+      },
+      {
+        upsert: true,
+        returnDocument: "after",
+      },
+    );
+
+    const updatedDoc = result.value ?? payload;
+    res.json(mapAchievementDocument(updatedDoc));
+  } catch (error) {
+    logger.error("Failed to unlock achievement", error);
+    res.status(500).json({ error: "Failed to unlock achievement" });
+  }
+});
+
+// ========= LEVEL PROGRESSION =========
+
+const mapLevelProgressDocument = (doc) => {
+  if (!doc) return null;
+  return {
+    userId: doc.userId,
+    totalXp: doc.totalXp ?? 0,
+    level: doc.level ?? levelFromXp(doc.totalXp ?? 0),
+    updatedAt: doc.updatedAt ?? null,
+    createdAt: doc.createdAt ?? null,
+  };
+};
+
+const mapMilestoneDocument = (doc) => {
+  if (!doc) return null;
+  const mapped = mapDocumentWithId(doc);
+  return {
+    id: mapped.id,
+    userId: mapped.userId,
+    oldLevel: mapped.oldLevel ?? 0,
+    newLevel: mapped.newLevel ?? 0,
+    xpGained: mapped.xpGained ?? 0,
+    totalXp: mapped.totalXp ?? 0,
+    rewardType: mapped.rewardType ?? null,
+    achievedAt: mapped.achievedAt ?? null,
+    createdAt: mapped.createdAt ?? null,
+  };
+};
+
+app.get("/level/:uid", async (req, res) => {
+  const { uid, isServiceAccount } = getAuthContext(req);
+  const targetUid = req.params.uid;
+  if (!targetUid) return res.status(400).json({ error: "Missing uid" });
+  if (!isServiceAccount && targetUid !== uid) return res.status(403).json({ error: "Forbidden" });
+
+  try {
+    const levelCollection = await getCollection(collectionLevelProgress);
+    const doc = await levelCollection.findOne({ userId: targetUid });
+    if (!doc) {
+      return res.json({
+        userId: targetUid,
+        totalXp: 0,
+        level: 1,
+        createdAt: null,
+        updatedAt: null,
+      });
+    }
+    res.json(mapLevelProgressDocument(doc));
+  } catch (error) {
+    logger.error("Failed to fetch level progress", error);
+    res.status(500).json({ error: "Failed to fetch level progress" });
+  }
+});
+
+app.put("/level/:uid", async (req, res) => {
+  const { uid, isServiceAccount } = getAuthContext(req);
+  const targetUid = req.params.uid;
+  if (!targetUid) return res.status(400).json({ error: "Missing uid" });
+  if (!isServiceAccount && targetUid !== uid) return res.status(403).json({ error: "Forbidden" });
+  const invalid = ensureBodyObject(req.body);
+  if (invalid) return res.status(400).json({ error: invalid });
+
+  const sanitized = sanitizeLevelProgressPayload(req.body);
+  const errors = validateLevelProgressPayload(sanitized);
+  if (errors.length > 0) {
+    return res.status(400).json({ error: "Invalid level progress payload", details: errors });
+  }
+
+  try {
+    const levelCollection = await getCollection(collectionLevelProgress);
+    const now = new Date().toISOString();
+    const totalXp = Math.max(0, Math.trunc(sanitized.totalXp));
+    const level = Math.min(LEVEL_SYSTEM.MAX_LEVEL, Math.max(1, Math.trunc(levelFromXp(totalXp))));
+
+    const payload = {
+      userId: targetUid,
+      totalXp,
+      level,
+      updatedAt: sanitized.updatedAt ?? now,
+    };
+
+    const result = await levelCollection.findOneAndUpdate(
+      { userId: targetUid },
+      {
+        $set: payload,
+        $setOnInsert: {
+          createdAt: now,
+        },
+      },
+      { upsert: true, returnDocument: "after" },
+    );
+
+    const updatedDoc = result.value ?? payload;
+    res.json(mapLevelProgressDocument(updatedDoc));
+  } catch (error) {
+    logger.error("Failed to save level progress", error);
+    res.status(500).json({ error: "Failed to save level progress" });
+  }
+});
+
+app.post("/level/:uid/increment", async (req, res) => {
+  const { uid, isServiceAccount } = getAuthContext(req);
+  const targetUid = req.params.uid;
+  if (!targetUid) return res.status(400).json({ error: "Missing uid" });
+  if (!isServiceAccount && targetUid !== uid) return res.status(403).json({ error: "Forbidden" });
+  const invalid = ensureBodyObject(req.body);
+  if (invalid) return res.status(400).json({ error: invalid });
+
+  const xpDeltaRaw = req.body?.xpDelta;
+  if (!Number.isFinite(xpDeltaRaw)) {
+    return res.status(400).json({ error: "xpDelta must be a number" });
+  }
+
+  const xpDelta = Math.trunc(xpDeltaRaw);
+
+  try {
+    const levelCollection = await getCollection(collectionLevelProgress);
+    const now = new Date().toISOString();
+    const existing = await levelCollection.findOne({ userId: targetUid });
+    const currentXp = Number.isFinite(existing?.totalXp) ? Number(existing.totalXp) : 0;
+    const newXp = Math.max(0, currentXp + xpDelta);
+    const newLevel = Math.min(LEVEL_SYSTEM.MAX_LEVEL, Math.max(1, Math.trunc(levelFromXp(newXp))));
+
+    const result = await levelCollection.findOneAndUpdate(
+      { userId: targetUid },
+      {
+        $set: {
+          userId: targetUid,
+          totalXp: newXp,
+          level: newLevel,
+          updatedAt: now,
+        },
+        $setOnInsert: {
+          createdAt: now,
+        },
+      },
+      { upsert: true, returnDocument: "after" },
+    );
+
+    const updatedDoc = result.value ?? {
+      userId: targetUid,
+      totalXp: newXp,
+      level: newLevel,
+      updatedAt: now,
+      createdAt: now,
+    };
+
+    res.json(mapLevelProgressDocument(updatedDoc));
+  } catch (error) {
+    logger.error("Failed to increment level progress", error);
+    res.status(500).json({ error: "Failed to increment level progress" });
+  }
+});
+
+app.get("/level/:uid/milestones", async (req, res) => {
+  const { uid, isServiceAccount } = getAuthContext(req);
+  const targetUid = req.params.uid;
+  if (!targetUid) return res.status(400).json({ error: "Missing uid" });
+  if (!isServiceAccount && targetUid !== uid) return res.status(403).json({ error: "Forbidden" });
+
+  const limitParam = Number(req.query.limit);
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(Math.trunc(limitParam), 1), 50) : 20;
+
+  try {
+    const milestonesCollection = await getCollection(collectionLevelMilestones);
+    const cursor = milestonesCollection
+      .find({ userId: targetUid })
+      .sort({ achievedAt: -1, createdAt: -1 })
+      .limit(limit);
+    const results = await cursor.toArray();
+    res.json(results.map(mapMilestoneDocument));
+  } catch (error) {
+    logger.error("Failed to fetch level milestones", error);
+    res.status(500).json({ error: "Failed to fetch level milestones" });
+  }
+});
+
+app.post("/level/:uid/milestones", async (req, res) => {
+  const { uid, isServiceAccount } = getAuthContext(req);
+  const targetUid = req.params.uid;
+  if (!targetUid) return res.status(400).json({ error: "Missing uid" });
+  if (!isServiceAccount && targetUid !== uid) return res.status(403).json({ error: "Forbidden" });
+  const invalid = ensureBodyObject(req.body);
+  if (invalid) return res.status(400).json({ error: invalid });
+
+  const sanitized = sanitizeMilestonePayload(req.body);
+  const errors = validateMilestonePayload(sanitized);
+  if (errors.length > 0) {
+    return res.status(400).json({ error: "Invalid milestone payload", details: errors });
+  }
+
+  try {
+    const milestonesCollection = await getCollection(collectionLevelMilestones);
+    const now = new Date().toISOString();
+    const payload = {
+      userId: targetUid,
+      oldLevel: sanitized.oldLevel,
+      newLevel: sanitized.newLevel,
+      xpGained: sanitized.xpGained,
+      totalXp: sanitized.totalXp,
+      rewardType: sanitized.rewardType,
+      achievedAt: sanitized.achievedAt ?? now,
+      createdAt: now,
+    };
+
+    const result = await milestonesCollection.insertOne(payload);
+    const inserted = {
+      _id: result.insertedId,
+      ...payload,
+    };
+    res.status(201).json(mapMilestoneDocument(inserted));
+  } catch (error) {
+    logger.error("Failed to save level milestone", error);
+    res.status(500).json({ error: "Failed to save level milestone" });
+  }
 });
 
 // ========= LEGAL & COMPLIANCE =========

@@ -101,10 +101,10 @@ packages:
     dependency: transitive
     description:
       name: build_daemon
-      sha256: "409002f1adeea601018715d613115cfaf0e31f512cb80ae4534c79867ae2363d"
+      sha256: bf05f6e12cfea92d3c09308d7bcdab1906cd8a179b023269eed00c071004b957
       url: "https://pub.dev"
     source: hosted
-    version: "4.1.0"
+    version: "4.1.1"
   build_resolvers:
     dependency: transitive
     description:
@@ -193,6 +193,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.4"
+  ci:
+    dependency: transitive
+    description:
+      name: ci
+      sha256: "145d095ce05cddac4d797a158bc4cf3b6016d1fe63d8c3d2fbd7212590adca13"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.0"
   cli_config:
     dependency: transitive
     description:
@@ -281,6 +289,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
+  color:
+    dependency: transitive
+    description:
+      name: color
+      sha256: ddcdf1b3badd7008233f5acffaf20ca9f5dc2cd0172b75f68f24526a5f5725cb
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.0"
   convert:
     dependency: transitive
     description:
@@ -329,6 +345,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.8"
+  custom_lint:
+    dependency: "direct dev"
+    description:
+      name: custom_lint
+      sha256: "78085fbe842de7c5bef92de811ca81536968dbcbbcdac5c316711add2d15e796"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.8.0"
   custom_lint_core:
     dependency: transitive
     description:
@@ -361,6 +385,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.1"
+  dartx:
+    dependency: transitive
+    description:
+      name: dartx
+      sha256: "8b25435617027257d43e6508b5fe061012880ddfdaa75a71d607c3de2a13d244"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.0"
   dartz:
     dependency: "direct main"
     description:
@@ -453,10 +485,10 @@ packages:
     dependency: transitive
     description:
       name: file_selector_platform_interface
-      sha256: a3994c26f10378a039faa11de174d7b78eb8f79e4dd0af2a451410c1a5c3f66b
+      sha256: "35e0bd61ebcdb91a3505813b055b09b79dfdc7d0aee9c09a7ba59ae4bb13dc85"
       url: "https://pub.dev"
     source: hosted
-    version: "2.6.2"
+    version: "2.7.0"
   file_selector_windows:
     dependency: transitive
     description:
@@ -606,6 +638,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.0"
+  flutter_gen_core:
+    dependency: transitive
+    description:
+      name: flutter_gen_core
+      sha256: b6bafbbd981da2f964eb45bcb8b8a7676a281084f8922c0c75de4cfbaa849311
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.12.0"
+  flutter_gen_runner:
+    dependency: "direct dev"
+    description:
+      name: flutter_gen_runner
+      sha256: c99b10af9d404e3f46fd1927e7d90099779e935e86022674c4c2a9e6c2a93b29
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.12.0"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:
@@ -825,10 +873,10 @@ packages:
     dependency: "direct main"
     description:
       name: go_router
-      sha256: d8f590a69729f719177ea68eb1e598295e8dbc41bbc247fed78b2c8a25660d7c
+      sha256: c92d18e1fe994cb06d48aa786c46b142a5633067e8297cff6b5a3ac742620104
       url: "https://pub.dev"
     source: hosted
-    version: "16.3.0"
+    version: "17.0.0"
   google_fonts:
     dependency: "direct main"
     description:
@@ -889,10 +937,10 @@ packages:
     dependency: transitive
     description:
       name: google_maps_flutter_web
-      sha256: "53e5dbf73ff04153acc55a038248706967c21d5b6ef6657a57fce2be73c2895a"
+      sha256: d416602944e1859f3cbbaa53e34785c223fa0a11eddb34a913c964c5cbb5d8cf
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.14+2"
+    version: "0.5.14+3"
   google_polyline_algorithm:
     dependency: "direct main"
     description:
@@ -957,6 +1005,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.8"
+  hashcodes:
+    dependency: transitive
+    description:
+      name: hashcodes
+      sha256: "80f9410a5b3c8e110c4b7604546034749259f5d6dcca63e0d3c17c9258f1a651"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.0"
   html:
     dependency: transitive
     description:
@@ -969,10 +1025,10 @@ packages:
     dependency: "direct main"
     description:
       name: http
-      sha256: bb2ce4590bc2667c96f318d68cac1b5a7987ec819351d32b1c987239a815e007
+      sha256: "87721a4a50b19c7f1d49001e51409bddc46303966ce89a65af4f4e6004896412"
       url: "https://pub.dev"
     source: hosted
-    version: "1.5.0"
+    version: "1.6.0"
   http_multi_server:
     dependency: transitive
     description:
@@ -1061,6 +1117,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.2"
+  image_size_getter:
+    dependency: transitive
+    description:
+      name: image_size_getter
+      sha256: "7c26937e0ae341ca558b7556591fd0cc456fcc454583b7cb665d2f03e93e590f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.1"
   in_app_review:
     dependency: "direct main"
     description:
@@ -1198,7 +1262,7 @@ packages:
     source: hosted
     version: "2.0.0"
   mockito:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: mockito
       sha256: "2314cbe9165bcd16106513df9cf3c3224713087f09723b128928dc11a4379f99"
@@ -1771,7 +1835,7 @@ packages:
     source: hosted
     version: "1.2.2"
   test:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: test
       sha256: "65e29d831719be0591f7b3b1a32a3cda258ec98c58c7b25f7b84241bc31215bb"
@@ -1794,6 +1858,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.6.11"
+  time:
+    dependency: transitive
+    description:
+      name: time
+      sha256: "370572cf5d1e58adcb3e354c47515da3f7469dac3a95b447117e728e7be6f461"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.5"
   timezone:
     dependency: "direct main"
     description:

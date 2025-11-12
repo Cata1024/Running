@@ -93,8 +93,7 @@ class RunState {
 
 @riverpod
 class RunTracker extends _$RunTracker {
-  // Para leer la configuración del usuario
-  late final AppSettings _settings;
+  AppSettings _settings = const AppSettings();
 
   StreamSubscription<Position>? _positionStream;
   Timer? _timer;

@@ -559,6 +559,7 @@ class FirebaseAuthService {
         'heightCm': null,
         'weightKg': null,
         'goalDescription': null,
+        'completedOnboarding': false,
         if (goalType != null) 'goalType': goalType,
         if (weeklyDistanceGoal != null) 'weeklyDistanceGoal': weeklyDistanceGoal,
       });

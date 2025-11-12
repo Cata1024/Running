@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 
 import '../firebase_options.dart';
 
@@ -83,25 +82,7 @@ Future<void> initFirebase() async {
     await Firebase.initializeApp(options: options);
     debugPrint('[EnvConfig] Firebase initialized with ${options.projectId}.');
     
-    // Inicializar App Check
-    // Debug mode: usa debug provider
-    // Release mode: usa Play Integrity (Android) / Device Check (iOS)
-    try {
-      final androidProvider = kDebugMode
-          ? const AndroidDebugProvider()
-          : const AndroidPlayIntegrityProvider();
-      final appleProvider = kDebugMode
-          ? const AppleDebugProvider()
-          : const AppleDeviceCheckProvider();
-
-      await FirebaseAppCheck.instance.activate(
-        providerAndroid: androidProvider,
-        providerApple: appleProvider,
-      );
-      debugPrint('[EnvConfig] Firebase App Check activated (Play Integrity / Device Check).');
-    } catch (e) {
-      debugPrint('[EnvConfig] App Check activation failed (non-critical): $e');
-    }
+    // App Check se inicializa durante el arranque de la app (ver _initializeApp)
   } on FirebaseException catch (e) {
     if (e.code == 'duplicate-app') {
       debugPrint(

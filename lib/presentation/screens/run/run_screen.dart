@@ -816,24 +816,22 @@ class _StatChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w500,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w500,
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: textStyle,
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: textStyle,
+        ),
+      ],
     );
   }
 }

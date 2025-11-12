@@ -258,6 +258,9 @@ class _AuthMethodSelectionScreenState extends ConsumerState<AuthMethodSelectionS
       
       if (!mounted) return;
       
+      // Limpiar datos previos para evitar residuos
+      ref.read(onboardingDataProvider.notifier).reset();
+
       // Guardar el método de autenticación
       ref.read(onboardingDataProvider.notifier).updateField((data) {
         data.authMethod = AuthMethod.google;
@@ -289,6 +292,7 @@ class _AuthMethodSelectionScreenState extends ConsumerState<AuthMethodSelectionS
   void _handleEmailPasswordSelection() {
     // Diferir la modificación del provider hasta después del frame actual
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(onboardingDataProvider.notifier).reset();
       ref.read(onboardingDataProvider.notifier).updateField((data) {
         data.authMethod = AuthMethod.emailPassword;
       });

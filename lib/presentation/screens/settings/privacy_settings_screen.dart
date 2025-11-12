@@ -7,7 +7,6 @@ import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/widgets/aero_widgets.dart';
 import '../../../domain/services/firebase_enterprise_service.dart';
 import '../../providers/app_providers.dart';
-import '../../providers/settings_provider.dart';
 import '../../../data/repositories/auth_repository.dart' show authRepositoryProvider;
 import 'home_filter_settings_screen.dart';
 
@@ -419,6 +418,7 @@ class PrivacySettingsScreen extends ConsumerWidget {
   FirebaseEnterpriseService _enterpriseService(WidgetRef ref) {
     return FirebaseEnterpriseService(
       authRepository: ref.read(authRepositoryProvider),
+      apiService: ref.read(apiServiceProvider),
     );
   }
 

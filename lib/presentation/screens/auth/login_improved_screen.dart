@@ -6,6 +6,7 @@ import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/widgets/aero_widgets.dart';
 import '../../../core/error/app_error.dart';
 import '../../providers/app_providers.dart';
+import 'complete_onboarding_screen.dart';
 
 /// Pantalla de login mejorada con diseño limpio y visual
 /// 
@@ -314,7 +315,17 @@ class _LoginImprovedScreenState extends ConsumerState<LoginImprovedScreen> {
                           style: theme.textTheme.bodyMedium,
                         ),
                         TextButton(
-                          onPressed: () => context.go('/auth/onboarding'),
+                          onPressed: _isLoading
+                              ? null
+                              : () {
+                                  // Reiniciar estado de onboarding para un registro limpio
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    ref
+                                        .read(onboardingDataProvider.notifier)
+                                        .reset();
+                                    context.go('/auth/method-selection');
+                                  });
+                                },
                           child: const Text(
                             'Regístrate',
                             style: TextStyle(fontWeight: FontWeight.w600),

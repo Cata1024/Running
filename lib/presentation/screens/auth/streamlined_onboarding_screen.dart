@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../core/design_system/territory_tokens.dart';
 import '../../../core/widgets/aero_widgets.dart';
 import '../../../domain/entities/registration_data.dart';
@@ -13,18 +14,18 @@ import 'streamlined_onboarding_steps_final.dart' as final_steps;
 /// Reducido desde 8-9 pasos para mejorar conversión
 class StreamlinedOnboardingScreen extends ConsumerStatefulWidget {
   final AuthMethod? authMethod;
-  
+
   const StreamlinedOnboardingScreen({
     super.key,
     this.authMethod,
   });
 
   @override
-  ConsumerState<StreamlinedOnboardingScreen> createState() => 
+  ConsumerState<StreamlinedOnboardingScreen> createState() =>
       _StreamlinedOnboardingScreenState();
 }
 
-class _StreamlinedOnboardingScreenState 
+class _StreamlinedOnboardingScreenState
     extends ConsumerState<StreamlinedOnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentStep = 0;
@@ -51,7 +52,7 @@ class _StreamlinedOnboardingScreenState
 
   void _nextStep() {
     HapticFeedback.lightImpact();
-    
+
     if (_currentStep < _totalSteps - 1) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 350),
@@ -64,7 +65,7 @@ class _StreamlinedOnboardingScreenState
 
   void _previousStep() {
     HapticFeedback.selectionClick();
-    
+
     if (_currentStep > 0) {
       _pageController.previousPage(
         duration: const Duration(milliseconds: 350),
@@ -75,7 +76,7 @@ class _StreamlinedOnboardingScreenState
 
   void _completeOnboarding() {
     final data = ref.read(onboardingDataProvider);
-    
+
     // Validar datos esenciales
     if (data.displayName.isEmpty ||
         data.birthDate == null ||
@@ -89,7 +90,11 @@ class _StreamlinedOnboardingScreenState
       );
       return;
     }
-    
+
+    ref.read(onboardingDataProvider.notifier).updateField((mutable) {
+      mutable.completedOnboarding = true;
+    });
+
     // Navegar a la pantalla de resumen
     context.go('/auth/profile-summary');
   }
@@ -105,7 +110,7 @@ class _StreamlinedOnboardingScreenState
           children: [
             // Progress bar mejorado
             _buildProgressBar(theme),
-            
+
             // Content
             Expanded(
               child: PageView(
@@ -128,7 +133,7 @@ class _StreamlinedOnboardingScreenState
 
   Widget _buildProgressBar(ThemeData theme) {
     final progress = (_currentStep + 1) / _totalSteps;
-    
+
     return Column(
       children: [
         Padding(
@@ -138,13 +143,15 @@ class _StreamlinedOnboardingScreenState
               // Botón atrás
               IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: _currentStep > 0 ? _previousStep : () => context.pop(),
+                onPressed:
+                    _currentStep > 0 ? _previousStep : () => context.pop(),
                 style: IconButton.styleFrom(
-                  backgroundColor: theme.colorScheme.surface.withValues(alpha: 0.8),
+                  backgroundColor:
+                      theme.colorScheme.surface.withValues(alpha: 0.8),
                 ),
               ),
               const SizedBox(width: 12),
-              
+
               // Progress info
               Expanded(
                 child: Column(
@@ -169,10 +176,11 @@ class _StreamlinedOnboardingScreenState
                       ],
                     ),
                     const SizedBox(height: 8),
-                    
+
                     // Progress bar con animación
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(TerritoryTokens.radiusSmall),
+                      borderRadius:
+                          BorderRadius.circular(TerritoryTokens.radiusSmall),
                       child: TweenAnimationBuilder<double>(
                         duration: const Duration(milliseconds: 300),
                         curve: Curves.easeOut,
@@ -181,7 +189,8 @@ class _StreamlinedOnboardingScreenState
                           return LinearProgressIndicator(
                             value: value,
                             minHeight: 8,
-                            backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                            backgroundColor:
+                                theme.colorScheme.surfaceContainerHighest,
                             valueColor: AlwaysStoppedAnimation<Color>(
                               theme.colorScheme.primary,
                             ),
@@ -205,27 +214,29 @@ class _StreamlinedOnboardingScreenState
 
 class _Step1WelcomeAndBasics extends ConsumerStatefulWidget {
   final VoidCallback? onNext;
-  
+
   const _Step1WelcomeAndBasics({this.onNext});
 
   @override
-  ConsumerState<_Step1WelcomeAndBasics> createState() => 
+  ConsumerState<_Step1WelcomeAndBasics> createState() =>
       _Step1WelcomeAndBasicsState();
 }
 
 class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final _nameController = TextEditingController();
   final _nameFocusNode = FocusNode();
+  final _birthDateController = TextEditingController();
   DateTime? _selectedDate;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  String? _birthDateError;
 
   @override
   void initState() {
     super.initState();
-    
+
     // Cargar datos previos
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -234,27 +245,34 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
       setState(() {
         _selectedDate = data.birthDate;
       });
+      if (data.birthDate != null) {
+        final formatted = _formatDate(data.birthDate!);
+        _birthDateController.value = TextEditingValue(
+          text: formatted,
+          selection: TextSelection.collapsed(offset: formatted.length),
+        );
+      }
     });
-    
+
     // Animaciones
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
-    
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.08),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
     );
-    
+
     _animationController.forward();
-    
+
     // Autofocus después de la animación
     Future.delayed(const Duration(milliseconds: 600), () {
       if (mounted) _nameFocusNode.requestFocus();
@@ -266,16 +284,20 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
     _nameController.dispose();
     _nameFocusNode.dispose();
     _animationController.dispose();
+    _birthDateController.dispose();
     super.dispose();
   }
 
+  @override
+  bool get wantKeepAlive => true;
+
   Future<void> _selectDate() async {
     HapticFeedback.selectionClick();
-    
+
     final now = DateTime.now();
     final minDate = DateTime(now.year - 100);
     final maxDate = DateTime(now.year - 13);
-    
+
     final date = await showDatePicker(
       context: context,
       initialDate: _selectedDate ?? maxDate,
@@ -286,7 +308,8 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
           data: Theme.of(context).copyWith(
             datePickerTheme: DatePickerThemeData(
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(TerritoryTokens.radiusMedium),
+                borderRadius:
+                    BorderRadius.circular(TerritoryTokens.radiusMedium),
               ),
             ),
           ),
@@ -294,16 +317,81 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
         );
       },
     );
-    
+
     if (date != null) {
       HapticFeedback.mediumImpact();
-      setState(() => _selectedDate = date);
+      _applyBirthDate(date);
     }
+  }
+
+  void _applyBirthDate(DateTime date) {
+    final formatted = _formatDate(date);
+    setState(() {
+      _selectedDate = date;
+      _birthDateError = null;
+      _birthDateController.value = TextEditingValue(
+        text: formatted,
+        selection: TextSelection.collapsed(offset: formatted.length),
+      );
+    });
+  }
+
+  String _formatDate(DateTime date) => DateFormat('dd/MM/yyyy').format(date);
+
+  DateTime? _tryParseBirthDate(String value) {
+    if (value.replaceAll(RegExp(r'[^0-9]'), '').length < 8) {
+      return null;
+    }
+    try {
+      final parsed = DateFormat('dd/MM/yyyy').parseStrict(value);
+      return parsed;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  bool _isWithinAllowedRange(DateTime date) {
+    final now = DateTime.now();
+    final minDate = DateTime(now.year - 100, now.month, now.day);
+    final maxDate = DateTime(now.year - 13, now.month, now.day);
+    return !date.isBefore(minDate) && !date.isAfter(maxDate);
+  }
+
+  void _onBirthDateChanged(String value) {
+    final parsed = _tryParseBirthDate(value);
+    if (parsed == null) {
+      setState(() {
+        if (value.isEmpty) {
+          _selectedDate = null;
+          _birthDateError = null;
+        } else if (value.replaceAll(RegExp(r'[^0-9]'), '').length < 8) {
+          _selectedDate = null;
+          _birthDateError = null;
+        } else {
+          _selectedDate = null;
+          _birthDateError = 'Fecha inválida';
+        }
+      });
+      return;
+    }
+
+    if (!_isWithinAllowedRange(parsed)) {
+      setState(() {
+        _selectedDate = null;
+        _birthDateError = 'Ingresa una fecha entre 13 y 100 años';
+      });
+      return;
+    }
+
+    setState(() {
+      _selectedDate = parsed;
+      _birthDateError = null;
+    });
   }
 
   void _handleNext() {
     final name = _nameController.text.trim();
-    
+
     if (name.isEmpty) {
       HapticFeedback.heavyImpact();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -314,9 +402,14 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
       );
       return;
     }
-    
-    if (_selectedDate == null) {
+
+    final birthDate =
+        _selectedDate ?? _tryParseBirthDate(_birthDateController.text);
+    if (birthDate == null || !_isWithinAllowedRange(birthDate)) {
       HapticFeedback.heavyImpact();
+      setState(() {
+        _birthDateError = 'Por favor ingresa una fecha válida';
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Por favor selecciona tu fecha de nacimiento'),
@@ -325,15 +418,15 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
       );
       return;
     }
-    
+
     // Guardar datos
     // Diferir la modificación del provider hasta después del frame actual
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(onboardingDataProvider.notifier).updateField((data) {
         data.displayName = name;
-        data.birthDate = _selectedDate;
+        data.birthDate = birthDate;
       });
-      
+
       // Navegar al siguiente paso
       widget.onNext?.call();
     });
@@ -352,8 +445,9 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
-    
+
     return FadeTransition(
       opacity: _fadeAnimation,
       child: SlideTransition(
@@ -363,7 +457,7 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
           child: Column(
             children: [
               const SizedBox(height: 16),
-              
+
               // Hero illustration
               Container(
                 width: 100,
@@ -390,13 +484,14 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
                   padding: const EdgeInsets.all(18),
                   child: SvgPicture.asset(
                     'assets/icons/running.svg',
-                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                    colorFilter:
+                        const ColorFilter.mode(Colors.white, BlendMode.srcIn),
                   ),
                 ),
               ),
-              
+
               const SizedBox(height: 24),
-              
+
               Text(
                 '¡Bienvenido a\nTerritory Run!',
                 style: theme.textTheme.headlineMedium?.copyWith(
@@ -405,19 +500,20 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
                 ),
                 textAlign: TextAlign.center,
               ),
-              
+
               const SizedBox(height: 12),
-              
+
               Text(
                 'Cuéntanos un poco sobre ti',
                 style: theme.textTheme.bodyLarge?.copyWith(
-                  color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                  color:
+                      theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
                 ),
                 textAlign: TextAlign.center,
               ),
-              
+
               const SizedBox(height: 40),
-              
+
               // Nombre
               AeroTextField(
                 controller: _nameController,
@@ -428,81 +524,44 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _selectDate(),
               ),
-              
+
               const SizedBox(height: 20),
-              
-              // Fecha de nacimiento
-              AeroCard(
-                onTap: _selectDate,
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: _selectedDate != null
-                              ? theme.colorScheme.primary.withValues(alpha: 0.15)
-                              : theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(TerritoryTokens.radiusSmall),
-                        ),
-                        child: Icon(
-                          Icons.cake_outlined,
-                          color: _selectedDate != null
-                              ? theme.colorScheme.primary
-                              : theme.iconTheme.color,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Fecha de nacimiento',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.6),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _selectedDate == null
-                                  ? 'Selecciona tu fecha'
-                                  : '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}${_age != null ? ' ($_age años)' : ''}',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: _selectedDate != null
-                                    ? theme.colorScheme.primary
-                                    : null,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        Icons.arrow_forward_ios,
-                        size: 16,
-                        color: theme.colorScheme.primary.withValues(alpha: 0.5),
-                      ),
-                    ],
-                  ),
+
+              // Fecha de nacimiento con formateo automático
+              AeroTextField(
+                controller: _birthDateController,
+                label: 'Fecha de nacimiento',
+                hint: 'DD/MM/AAAA',
+                helperText:
+                    _age != null ? 'Edad: $_age años' : 'Formato DD/MM/AAAA',
+                errorText: _birthDateError,
+                prefixIcon: const Icon(Icons.cake_outlined),
+                suffixIcon: IconButton(
+                  tooltip: 'Abrir calendario',
+                  icon: const Icon(Icons.calendar_today),
+                  onPressed: _selectDate,
                 ),
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                onChanged: _onBirthDateChanged,
+                onSubmitted: (_) => _handleNext(),
+                inputFormatters: const [_DateTextInputFormatter()],
               ),
-              
+
               const SizedBox(height: 32),
-              
+
               AeroButton(
                 onPressed: _handleNext,
                 child: const Text('Continuar'),
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               Text(
                 '¡Solo 3 pasos más! 🚀',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.5),
+                  color:
+                      theme.textTheme.bodySmall?.color?.withValues(alpha: 0.5),
                 ),
               ),
             ],
@@ -517,15 +576,16 @@ class _Step1WelcomeAndBasicsState extends ConsumerState<_Step1WelcomeAndBasics>
 
 class _Step2PhysicalProfile extends ConsumerStatefulWidget {
   final VoidCallback? onNext;
-  
+
   const _Step2PhysicalProfile({this.onNext});
 
   @override
-  ConsumerState<_Step2PhysicalProfile> createState() => 
+  ConsumerState<_Step2PhysicalProfile> createState() =>
       _Step2PhysicalProfileState();
 }
 
-class _Step2PhysicalProfileState extends ConsumerState<_Step2PhysicalProfile> {
+class _Step2PhysicalProfileState extends ConsumerState<_Step2PhysicalProfile>
+    with AutomaticKeepAliveClientMixin {
   String _selectedGender = '';
   double _weight = 70.0;
   int _height = 170;
@@ -533,7 +593,7 @@ class _Step2PhysicalProfileState extends ConsumerState<_Step2PhysicalProfile> {
   @override
   void initState() {
     super.initState();
-    
+
     // Cargar datos previos
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -546,6 +606,9 @@ class _Step2PhysicalProfileState extends ConsumerState<_Step2PhysicalProfile> {
     });
   }
 
+  @override
+  bool get wantKeepAlive => true;
+
   void _handleNext() {
     if (_selectedGender.isEmpty) {
       HapticFeedback.heavyImpact();
@@ -557,7 +620,7 @@ class _Step2PhysicalProfileState extends ConsumerState<_Step2PhysicalProfile> {
       );
       return;
     }
-    
+
     // Guardar datos
     // Diferir la modificación del provider hasta después del frame actual
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -566,7 +629,7 @@ class _Step2PhysicalProfileState extends ConsumerState<_Step2PhysicalProfile> {
         data.weightKg = _weight;
         data.heightCm = _height;
       });
-      
+
       // Navegar al siguiente paso
       widget.onNext?.call();
     });
@@ -574,22 +637,23 @@ class _Step2PhysicalProfileState extends ConsumerState<_Step2PhysicalProfile> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
-    
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
           const SizedBox(height: 16),
-          
+
           Icon(
             Icons.accessibility_new,
             size: 80,
             color: theme.colorScheme.primary,
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           Text(
             'Tu perfil físico',
             style: theme.textTheme.headlineMedium?.copyWith(
@@ -597,9 +661,9 @@ class _Step2PhysicalProfileState extends ConsumerState<_Step2PhysicalProfile> {
             ),
             textAlign: TextAlign.center,
           ),
-          
+
           const SizedBox(height: 12),
-          
+
           Text(
             'Esto nos ayuda a calcular tus métricas',
             style: theme.textTheme.bodyLarge?.copyWith(
@@ -607,9 +671,9 @@ class _Step2PhysicalProfileState extends ConsumerState<_Step2PhysicalProfile> {
             ),
             textAlign: TextAlign.center,
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           // Género - versión compacta
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -684,125 +748,153 @@ class _Step2PhysicalProfileState extends ConsumerState<_Step2PhysicalProfile> {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 32),
-          
-          // Peso y Altura lado a lado
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+
+          // Peso y Altura en columnas individuales
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Peso
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 8),
-                      child: Text(
-                        'Peso',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    AeroCard(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.monitor_weight_outlined,
-                              size: 32,
-                              color: theme.colorScheme.primary,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${_weight.toStringAsFixed(0)} kg',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Slider(
-                              value: _weight,
-                              min: 30,
-                              max: 200,
-                              divisions: 170,
-                              onChanged: (value) {
-                                setState(() => _weight = value);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+              _PhysicalStatSliderCard(
+                title: 'Peso',
+                valueLabel: '${_weight.toStringAsFixed(0)} kg',
+                icon: Icons.monitor_weight_outlined,
+                slider: Slider(
+                  value: _weight,
+                  min: 30,
+                  max: 200,
+                  divisions: 170,
+                  onChanged: (value) {
+                    setState(() => _weight = value);
+                  },
+                  onChangeEnd: (_) => HapticFeedback.selectionClick(),
                 ),
               ),
-              
-              const SizedBox(width: 16),
-              
-              // Altura
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4, bottom: 8),
-                      child: Text(
-                        'Altura',
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    AeroCard(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.height,
-                              size: 32,
-                              color: theme.colorScheme.primary,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '$_height cm',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Slider(
-                              value: _height.toDouble(),
-                              min: 100,
-                              max: 250,
-                              divisions: 150,
-                              onChanged: (value) {
-                                setState(() => _height = value.round());
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 16),
+              _PhysicalStatSliderCard(
+                title: 'Altura',
+                valueLabel: '$_height cm',
+                icon: Icons.height,
+                slider: Slider(
+                  value: _height.toDouble(),
+                  min: 100,
+                  max: 250,
+                  divisions: 150,
+                  onChanged: (value) {
+                    setState(() => _height = value.round());
+                  },
+                  onChangeEnd: (_) => HapticFeedback.selectionClick(),
                 ),
               ),
             ],
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           AeroButton(
             onPressed: _handleNext,
             child: const Text('Continuar'),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PhysicalStatSliderCard extends StatelessWidget {
+  final String title;
+  final String valueLabel;
+  final IconData icon;
+  final Slider slider;
+
+  const _PhysicalStatSliderCard({
+    required this.title,
+    required this.valueLabel,
+    required this.icon,
+    required this.slider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text(
+            title,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        AeroCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Icon(
+                  icon,
+                  size: 32,
+                  color: scheme.primary.withValues(alpha: 0.85),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  valueLabel,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: scheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 6,
+                    activeTrackColor: scheme.primary,
+                    inactiveTrackColor: scheme.primary.withValues(alpha: 0.2),
+                    thumbColor: scheme.primary,
+                    overlayColor: scheme.primary.withValues(alpha: 0.12),
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 10),
+                    overlayShape:
+                        const RoundSliderOverlayShape(overlayRadius: 18),
+                  ),
+                  child: slider,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DateTextInputFormatter extends TextInputFormatter {
+  const _DateTextInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final buffer = StringBuffer();
+
+    for (var i = 0; i < digitsOnly.length && i < 8; i++) {
+      if (i == 2 || i == 4) {
+        buffer.write('/');
+      }
+      buffer.write(digitsOnly[i]);
+    }
+
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }
@@ -825,36 +917,44 @@ class _GenderChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+    final scheme = theme.colorScheme;
+    final selectedColor = scheme.primary.withValues(alpha: 0.14);
+    final iconColor = isSelected
+        ? scheme.primary.withValues(alpha: 0.85)
+        : theme.iconTheme.color?.withValues(alpha: 0.6);
+    final textColor =
+        isSelected ? scheme.primary.withValues(alpha: 0.85) : null;
+
     return AeroCard(
-      level: isSelected ? AeroLevel.medium : AeroLevel.ghost,
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: isSelected
-            ? BoxDecoration(
-                border: Border.all(
-                  color: theme.colorScheme.primary,
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(TerritoryTokens.radiusSmall),
-              )
-            : null,
+      level: AeroLevel.subtle,
+      child: AnimatedContainer(
+        duration: TerritoryTokens.durationFast,
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? selectedColor : scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(TerritoryTokens.radiusSmall),
+          border: Border.all(
+            color: isSelected
+                ? scheme.primary.withValues(alpha: 0.3)
+                : scheme.outline.withValues(alpha: 0.08),
+            width: 1,
+          ),
+        ),
         child: Column(
           children: [
             Icon(
               icon,
               size: 24,
-              color: isSelected
-                  ? theme.colorScheme.primary
-                  : theme.iconTheme.color?.withValues(alpha: 0.6),
+              color: iconColor,
             ),
             const SizedBox(height: 4),
             Text(
               label,
               style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? theme.colorScheme.primary : null,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                color: textColor,
               ),
               textAlign: TextAlign.center,
               maxLines: 1,

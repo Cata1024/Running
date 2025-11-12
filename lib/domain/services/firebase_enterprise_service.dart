@@ -1,7 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../data/services/api_service.dart';
 import '../repositories/i_auth_repository.dart';
 
 /// Servicio para funcionalidades de Firebase Enterprise
@@ -9,14 +9,14 @@ class FirebaseEnterpriseService {
   FirebaseEnterpriseService({
     required IAuthRepository authRepository,
     FirebaseFunctions? functions,
-    FirebaseFirestore? firestore,
+    ApiService? apiService,
   })  : _authRepository = authRepository,
-        _firestore = firestore ?? FirebaseFirestore.instance,
+        _apiService = apiService ?? ApiService(),
         _functions =
             functions ?? FirebaseFunctions.instanceFor(region: 'southamerica-west1');
 
   final IAuthRepository _authRepository;
-  final FirebaseFirestore _firestore;
+  final ApiService _apiService;
   final FirebaseFunctions _functions;
 
   /// Exporta todos los datos del usuario usando Cloud Function
@@ -48,44 +48,10 @@ class FirebaseEnterpriseService {
   /// Esto se ejecuta ANTES de eliminar la cuenta de Auth
   Future<void> deleteUserDataFromFirestore(String userId) async {
     try {
-      final batch = _firestore.batch();
-      
-      // Eliminar runs del usuario
-      final runsQuery = await _firestore
-          .collection('runs')
-          .where('userId', isEqualTo: userId)
-          .get();
-      
-      for (final doc in runsQuery.docs) {
-        batch.delete(doc.reference);
-      }
-      
-      // Eliminar documento de perfil de usuario
-      batch.delete(_firestore.collection('users').doc(userId));
-      
-      // Eliminar sub-colecciones del usuario
-      final subCollections = [
-        'achievements',
-        'level_history',
-        'notifications',
-        'settings',
-      ];
-      
-      for (final collectionName in subCollections) {
-        final subDocs = await _firestore
-            .collection('users')
-            .doc(userId)
-            .collection(collectionName)
-            .get();
-        
-        for (final doc in subDocs.docs) {
-          batch.delete(doc.reference);
-        }
-      }
-      
-      // Ejecutar todas las eliminaciones
-      await batch.commit();
-      
+      final callable = _functions.httpsCallable('deleteUserData');
+      await callable.call({'userId': userId});
+      await _apiService.deleteUserRuns(userId);
+      await _apiService.deleteUserProfile(userId);
     } catch (e) {
       throw FirebaseEnterpriseException(
         'Error al eliminar datos de Firestore: $e',

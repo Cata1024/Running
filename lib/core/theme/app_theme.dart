@@ -95,6 +95,8 @@ class AppTheme {
         );
 
     final textTheme = _buildTextTheme(scheme);
+    final primary = scheme.primary;
+    final mutedPrimary = _mutedPrimary(primary);
 
     return ThemeData(
       useMaterial3: true,
@@ -119,16 +121,17 @@ class AppTheme {
       // Botones con estilo glassmorphism
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          foregroundColor: Colors.white,
-          backgroundColor: primaryGradientStart,
+          foregroundColor: scheme.onPrimary,
+          backgroundColor: primary,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusMedium),
           ),
         ).copyWith(
-          overlayColor:
-              WidgetStateProperty.all(Colors.white.withValues(alpha: 0.1)),
+          overlayColor: WidgetStateProperty.all(
+            scheme.onPrimary.withValues(alpha: 0.08),
+          ),
           elevation: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.pressed)) return 0;
             if (states.contains(WidgetState.hovered)) return 2;
@@ -140,7 +143,8 @@ class AppTheme {
       // TextButton minimalista
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: primaryGradientStart,
+          foregroundColor: mutedPrimary,
+          overlayColor: mutedPrimary.withValues(alpha: 0.12),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusSmall),
@@ -164,7 +168,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
-          borderSide: const BorderSide(color: primaryGradientStart, width: 2),
+          borderSide: BorderSide(color: mutedPrimary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
@@ -188,15 +192,15 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLarge),
-          side: const BorderSide(color: glassBorder, width: 1),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.2), width: 1),
         ),
-        color: Colors.white.withValues(alpha: 0.9),
+        color: scheme.surface.withValues(alpha: 0.9),
       ),
 
       // Chips modernos
       chipTheme: ChipThemeData(
-        backgroundColor: Colors.grey[100],
-        selectedColor: primaryGradientStart.withValues(alpha: 0.2),
+        backgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.12),
+        selectedColor: primary.withValues(alpha: 0.2),
         labelStyle: textTheme.bodySmall,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         shape: RoundedRectangleBorder(
@@ -206,9 +210,9 @@ class AppTheme {
 
       // Bottom Navigation con glassmorphism
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: Colors.white.withValues(alpha: 0.9),
-        selectedItemColor: primaryGradientStart,
-        unselectedItemColor: Colors.grey[600],
+        backgroundColor: scheme.surface.withValues(alpha: 0.9),
+        selectedItemColor: primary,
+        unselectedItemColor: scheme.onSurfaceVariant,
         showUnselectedLabels: false,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
@@ -216,8 +220,8 @@ class AppTheme {
 
       // Snackbar moderno
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: Colors.grey[900]?.withValues(alpha: 0.9),
-        contentTextStyle: textTheme.bodyMedium?.copyWith(color: Colors.white),
+        backgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.9),
+        contentTextStyle: textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
@@ -227,7 +231,7 @@ class AppTheme {
 
       // Dialog con bordes redondeados
       dialogTheme: DialogThemeData(
-        backgroundColor: Colors.white,
+        backgroundColor: scheme.surface,
         elevation: 8,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLarge),
@@ -236,13 +240,13 @@ class AppTheme {
 
       // Divider minimalista
       dividerTheme: DividerThemeData(
-        color: Colors.grey[200],
+        color: scheme.outlineVariant.withValues(alpha: 0.3),
         thickness: 0.5,
         space: 1,
       ),
 
       // Scaffold background
-      scaffoldBackgroundColor: Colors.grey[50],
+      scaffoldBackgroundColor: scheme.surface,
 
       // Page transitions suaves
       pageTransitionsTheme: const PageTransitionsTheme(
@@ -264,6 +268,8 @@ class AppTheme {
         );
 
     final textTheme = _buildTextTheme(scheme, isDark: true);
+    final primary = scheme.primary;
+    final mutedPrimary = _mutedPrimary(primary);
 
     return ThemeData(
       useMaterial3: true,
@@ -272,20 +278,20 @@ class AppTheme {
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
         systemOverlayStyle: SystemUiOverlayStyle.light,
-        backgroundColor: const Color(0xFF121212).withValues(alpha: 0.8),
-        foregroundColor: Colors.white,
+        backgroundColor: scheme.surface.withValues(alpha: 0.8),
+        foregroundColor: scheme.onSurface,
         elevation: 0,
         centerTitle: true,
         titleTextStyle: textTheme.titleLarge?.copyWith(
           fontWeight: FontWeight.w600,
-          color: Colors.white,
+          color: scheme.onSurface,
         ),
-        iconTheme: const IconThemeData(color: Colors.white70),
+        iconTheme: IconThemeData(color: scheme.onSurfaceVariant),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          foregroundColor: Colors.white,
-          backgroundColor: primaryGradientStart,
+          foregroundColor: scheme.onPrimary,
+          backgroundColor: primary,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
@@ -293,9 +299,19 @@ class AppTheme {
           ),
         ),
       ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: mutedPrimary,
+          overlayColor: mutedPrimary.withValues(alpha: 0.16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(radiusSmall),
+          ),
+        ),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.05),
+        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.12),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         border: OutlineInputBorder(
@@ -304,24 +320,22 @@ class AppTheme {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
-          borderSide:
-              BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1),
+          borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.2), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMedium),
-          borderSide: const BorderSide(color: primaryGradientStart, width: 2),
+          borderSide: BorderSide(color: mutedPrimary, width: 2),
         ),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLarge),
-          side:
-              BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1),
+          side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.2), width: 1),
         ),
-        color: Colors.white.withValues(alpha: 0.05),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.2),
       ),
-      scaffoldBackgroundColor: const Color(0xFF0A0A0A),
+      scaffoldBackgroundColor: scheme.surface,
     );
   }
 
@@ -419,5 +433,13 @@ class AppTheme {
         color: secondaryTextColor,
       ),
     );
+  }
+
+  static Color _mutedPrimary(Color color) {
+    final hsl = HSLColor.fromColor(color);
+    return hsl
+        .withSaturation((hsl.saturation * 0.4).clamp(0.0, 1.0))
+        .withLightness((hsl.lightness + 0.12).clamp(0.0, 1.0))
+        .toColor();
   }
 }

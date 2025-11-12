@@ -1,20 +1,22 @@
 import 'dart:convert';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/constants/level_system.dart';
 import '../../domain/entities/level_progress.dart';
 import '../../domain/repositories/i_level_progress_repository.dart';
+import '../services/api_service.dart';
 
-/// Firebase-backed implementation that also caches snapshots locally using
-/// [SharedPreferences].
+/// REST-backed implementation that uses the Territory Run API and caches
+/// snapshots locally using [SharedPreferences].
 class LevelProgressRepository implements ILevelProgressRepository {
-  LevelProgressRepository({FirebaseFirestore? firestore, SharedPreferences? preferences})
-      : _firestore = firestore ?? FirebaseFirestore.instance,
+  LevelProgressRepository({
+    required ApiService api,
+    SharedPreferences? preferences,
+  })  : _api = api,
         _preferences = preferences;
 
-  final FirebaseFirestore _firestore;
+  final ApiService _api;
   SharedPreferences? _preferences;
 
   static const _cacheKeyPrefix = 'level_progress_';
@@ -27,20 +29,8 @@ class LevelProgressRepository implements ILevelProgressRepository {
     return prefs;
   }
 
-  CollectionReference<Map<String, dynamic>> get _usersCollection =>
-      _firestore.collection('users');
-
-  DocumentReference<Map<String, dynamic>> _userDoc(String userId) {
-    return _usersCollection.doc(userId);
-  }
-
-  CollectionReference<Map<String, dynamic>> _milestonesCollection(String userId) {
-    return _userDoc(userId).collection('level_history');
-  }
-
   DateTime? _parseDate(dynamic value) {
     if (value == null) return null;
-    if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
     if (value is num) {
       return DateTime.fromMillisecondsSinceEpoch(value.toInt());
@@ -56,7 +46,7 @@ class LevelProgressRepository implements ILevelProgressRepository {
       return LevelProgressSnapshot.initial;
     }
 
-    final totalXp = (data['xp'] as num?)?.toInt() ?? 0;
+    final totalXp = (data['totalXp'] as num?)?.toInt() ?? 0;
     final level = (data['level'] as num?)?.toInt() ?? LevelSystem.levelFromXP(totalXp);
     final updatedAt = _parseDate(data['updatedAt']);
 
@@ -112,66 +102,40 @@ class LevelProgressRepository implements ILevelProgressRepository {
       'oldLevel': entry.oldLevel,
       'newLevel': entry.newLevel,
       'xpGained': entry.xpGained,
-      'totalXP': entry.totalXp,
+      'totalXp': entry.totalXp,
       'rewardType': entry.rewardType?.name,
-      'achievedAt': entry.achievedAt != null
-          ? Timestamp.fromDate(entry.achievedAt!)
-          : FieldValue.serverTimestamp(),
+      'achievedAt': entry.achievedAt?.toIso8601String(),
     };
   }
 
   @override
   Future<LevelProgressSnapshot> fetchProgress(String userId) async {
-    final doc = await _userDoc(userId).get();
-    final snapshot = _snapshotFromMap(doc.data());
-    await saveCachedProgress(userId, snapshot);
-    return snapshot;
+    try {
+      final response = await _api.fetchLevelProgress(userId);
+      final snapshot = _snapshotFromMap(response);
+      await saveCachedProgress(userId, snapshot);
+      return snapshot;
+    } catch (e) {
+      final cached = await readCachedProgress(userId);
+      if (cached != null) return cached;
+      rethrow;
+    }
   }
 
   @override
   Future<LevelProgressSnapshot> incrementXp({required String userId, required int xpDelta}) async {
-    final docRef = _userDoc(userId);
-    final now = DateTime.now();
-
-    final snapshot = await _firestore.runTransaction((transaction) async {
-      final doc = await transaction.get(docRef);
-      final currentData = doc.data() ?? <String, dynamic>{};
-      final currentXp = (currentData['xp'] as num?)?.toInt() ?? 0;
-      final newXp = (currentXp + xpDelta).clamp(0, 1 << 31);
-      final newLevel = LevelSystem.levelFromXP(newXp);
-
-      transaction.set(
-        docRef,
-        {
-          'xp': newXp,
-          'level': newLevel,
-          'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
-
-      return LevelProgressSnapshot(
-        level: newLevel,
-        totalXp: newXp,
-        updatedAt: now,
-        cachedAt: now,
-      );
-    });
-
+    final response = await _api.incrementLevelXp(userId, xpDelta: xpDelta);
+    final snapshot = _snapshotFromMap(response);
     await saveCachedProgress(userId, snapshot);
     return snapshot;
   }
 
   @override
   Future<void> initializeUser(String userId) async {
-    await _userDoc(userId).set(
-      {
-        'xp': 0,
-        'level': 1,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
+    await _api.saveLevelProgress(
+      userId,
+      totalXp: 0,
+      level: 1,
     );
     await saveCachedProgress(userId, LevelProgressSnapshot.initial);
   }
@@ -203,17 +167,12 @@ class LevelProgressRepository implements ILevelProgressRepository {
 
   @override
   Future<List<LevelMilestoneEntry>> fetchRecentMilestones(String userId, {int limit = 20}) async {
-    final query = await _milestonesCollection(userId)
-        .orderBy('achievedAt', descending: true)
-        .limit(limit)
-        .get();
-    return query.docs
-        .map((doc) => _milestoneFromMap(doc.data()))
-        .toList(growable: false);
+    final response = await _api.fetchLevelMilestones(userId, limit: limit);
+    return response.map(_milestoneFromMap).toList(growable: false);
   }
 
   @override
   Future<void> saveMilestone(String userId, LevelMilestoneEntry milestone) async {
-    await _milestonesCollection(userId).add(_milestoneToMap(milestone));
+    await _api.addLevelMilestone(userId, payload: _milestoneToMap(milestone));
   }
 }

@@ -18,19 +18,45 @@ class LevelSection extends ConsumerWidget {
     final theme = Theme.of(context);
 
     // Nivel y XP desde providers optimizados (fallback al VM)
-    final currentLevel = ref.watch(userLevelProvider);
+    final providerLevel = ref.watch(userLevelProvider);
+    final currentLevel =
+        providerLevel != 1 || profile.level <= 1 ? providerLevel : profile.level;
     final currentXP = ref.watch(userExperienceProvider) ?? profile.xp;
 
-    // Calcular progreso a partir de XP y umbrales
-    final xpForCurrentLevel = LevelSystem.totalXpForLevel(currentLevel);
-    final xpForNextLevel = LevelSystem.totalXpForLevel(currentLevel + 1);
-    final xpInCurrentLevel = currentXP - xpForCurrentLevel;
-    final xpNeededForNext = xpForNextLevel - xpForCurrentLevel;
-    final xpToNext = xpForNextLevel - currentXP;
-    final progress = (
-      xpNeededForNext > 0 ? (xpInCurrentLevel / xpNeededForNext) : 0.0
-    ).clamp(0.0, 1.0);
-    
+    // Calcular progreso a partir de XP y umbrales (usando backend si está disponible)
+    final xpLowerBound =
+        (profile.currentLevelExperience?.round()) ?? LevelSystem.totalXpForLevel(currentLevel);
+    final nextThresholdFromProfile = profile.nextLevelExperience?.round();
+    final isMaxLevel = currentLevel >= LevelSystem.maxLevel;
+    final xpForNextLevel = () {
+      if (isMaxLevel) {
+        return currentXP > xpLowerBound ? currentXP : xpLowerBound;
+      }
+      if (nextThresholdFromProfile != null && nextThresholdFromProfile > xpLowerBound) {
+        return nextThresholdFromProfile;
+      }
+      return LevelSystem.totalXpForLevel(currentLevel + 1);
+    }();
+
+    final rawXpNeededForNext = xpForNextLevel - xpLowerBound;
+    final xpNeededForNext = rawXpNeededForNext > 0 ? rawXpNeededForNext : 0;
+    final rawXpInCurrentLevel = currentXP - xpLowerBound;
+    final xpInCurrentLevel = xpNeededForNext > 0
+        ? rawXpInCurrentLevel.clamp(0, xpNeededForNext).toInt()
+        : (rawXpInCurrentLevel > 0 ? rawXpInCurrentLevel : 0);
+    final xpToNext = xpNeededForNext > 0
+        ? (xpForNextLevel - currentXP).clamp(0, xpNeededForNext).toInt()
+        : 0;
+    final progress = xpNeededForNext > 0
+        ? (rawXpInCurrentLevel.toDouble() / xpNeededForNext).clamp(0.0, 1.0)
+        : 1.0;
+
+    final xpNeededLabel = xpNeededForNext > 0 ? xpNeededForNext.toString() : '--';
+    final nextLevelLabel =
+        (isMaxLevel || xpNeededForNext == 0) ? 'Nivel máximo alcanzado' : '$xpToNext XP para nivel ${currentLevel + 1}';
+    final progressLabel =
+        (isMaxLevel || xpNeededForNext == 0) ? '100% completado' : '${(progress * 100).round()}% completado';
+
     final levelTitle = LevelSystem.getLevelTitle(currentLevel);
     final levelColor = Color(
       int.parse(LevelSystem.getLevelColor(currentLevel).replaceAll('#', '0xFF')),
@@ -139,14 +165,14 @@ class LevelSection extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '$xpInCurrentLevel / $xpNeededForNext',
+                    '$xpInCurrentLevel / $xpNeededLabel',
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: theme.colorScheme.primary,
                     ),
                   ),
                   Text(
-                    '$xpToNext XP para nivel ${currentLevel + 1}',
+                    nextLevelLabel,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -191,7 +217,7 @@ class LevelSection extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                "${(progress * 100).round()}% completado",
+                progressLabel,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),

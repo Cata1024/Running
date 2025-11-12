@@ -485,14 +485,14 @@ class RouteProcessingConfig {
         splineSegments = 15,
         splineTension = 0.5;
 
-  /// Solo almacenamiento (sin suavizado visual)
+  /// Configuración optimizada para almacenamiento que preserva giros
   const RouteProcessingConfig.storage()
       : useKalmanFilter = true,
         kalmanProcessNoise = 0.5,
         useVisvalingam = true,
-        visvalingamTolerance = 0.00005,
-        useDouglasPeucker = true,
-        douglasPeuckerTolerance = 0.00002,
+        visvalingamTolerance = 0.00001,  // Más preciso (1.1m)
+        useDouglasPeucker = false,       // Desactivado para preservar giros
+        douglasPeuckerTolerance = 0.0,
         useSplineSmoothing = false,
         splineSegments = 0,
         splineTension = 0.0;

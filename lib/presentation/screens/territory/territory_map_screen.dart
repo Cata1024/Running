@@ -276,10 +276,6 @@ class _TerritoryMapScreenState extends ConsumerState<TerritoryMapScreen> {
             decoration: BoxDecoration(
               color: theme.colorScheme.surface.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(TerritoryTokens.radiusLarge),
-              border: Border.all(
-                color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                width: 1,
-              ),
             ),
             child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

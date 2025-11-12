@@ -7,6 +7,7 @@ import '../../../../core/widgets/aero_widgets.dart';
 import '../../../../core/design_system/territory_tokens.dart';
 import '../../../providers/achievements_provider.dart';
 import '../../achievements/widgets/achievement_card.dart';
+import '../../../../domain/entities/achievement.dart';
 
 /// Sección de logros para mostrar en el perfil
 class AchievementsSection extends ConsumerWidget {
@@ -177,69 +178,20 @@ class AchievementsSection extends ConsumerWidget {
             // Logros cercanos a completar
             if (nearCompletion.isNotEmpty) ...[
               const SizedBox(height: 24),
-              Text(
-                '🔥 Casi lo logras',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 120,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: nearCompletion.length,
-                  itemBuilder: (context, index) {
-                    return Padding(
-                      padding: EdgeInsets.only(
-                        right: index < nearCompletion.length - 1 ? 8 : 0,
-                      ),
-                      child: AchievementCard(
-                        achievement: nearCompletion[index],
-                        compact: true,
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          context.push('/achievements');
-                        },
-                      ),
-                    );
-                  },
-                ),
+              _HorizontalAchievementsList(
+                title: '🔥 Casi lo logras',
+                achievements: nearCompletion,
+                showProgress: true,
               ),
             ],
 
             // Logros recientes
             if (recentUnlocked.isNotEmpty) ...[
               const SizedBox(height: 24),
-              Text(
-                '✨ Logros Recientes',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 120,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: recentUnlocked.length,
-                  itemBuilder: (context, index) {
-                    return Padding(
-                      padding: EdgeInsets.only(
-                        right: index < recentUnlocked.length - 1 ? 8 : 0,
-                      ),
-                      child: AchievementCard(
-                        achievement: recentUnlocked[index],
-                        compact: true,
-                        showProgress: false,
-                        onTap: () {
-                          HapticFeedback.lightImpact();
-                          context.push('/achievements');
-                        },
-                      ),
-                    );
-                  },
-                ),
+              _HorizontalAchievementsList(
+                title: '✨ Logros Recientes',
+                achievements: recentUnlocked,
+                showProgress: false,
               ),
             ],
 
@@ -299,6 +251,74 @@ class AchievementsSection extends ConsumerWidget {
             fontSize: 10,
             color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HorizontalAchievementsList extends StatelessWidget {
+  final String title;
+  final List<Achievement> achievements;
+  final bool showProgress;
+
+  const _HorizontalAchievementsList({
+    required this.title,
+    required this.achievements,
+    required this.showProgress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final maxWidth = constraints.maxWidth;
+            final cardWidth = maxWidth >= 720
+                ? 144.0
+                : maxWidth >= 540
+                    ? 128.0
+                    : maxWidth >= 420
+                        ? 112.0
+                        : 96.0;
+            final listHeight = cardWidth + 44;
+
+            return SizedBox(
+              height: listHeight,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                itemBuilder: (context, index) {
+                  final achievement = achievements[index];
+                  return AchievementCard(
+                    achievement: achievement,
+                    compact: true,
+                    compactWidth: cardWidth,
+                    compactMargin: EdgeInsets.zero,
+                    showProgress: showProgress,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      context.push('/achievements');
+                    },
+                  );
+                },
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemCount: achievements.length,
+              ),
+            );
+          },
         ),
       ],
     );
